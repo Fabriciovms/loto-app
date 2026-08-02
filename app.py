@@ -2,6 +2,7 @@ import itertools
 import math
 import re
 from itertools import combinations
+from pathlib import Path
 
 import requests
 import streamlit as st
@@ -10,6 +11,7 @@ LOTOFACIL_MIN = 1
 LOTOFACIL_MAX = 25
 ALL_NUMBERS = list(range(LOTOFACIL_MIN, LOTOFACIL_MAX + 1))
 API_URL = "https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest"
+LOGO_PATH = Path(__file__).parent / "logo" / "lotoapp.png"
 
 NUMBER_BUTTON_CSS = """
 <style>
@@ -188,7 +190,7 @@ def render_generator():
         "Quantidade de grupos",
         min_value=0,
         max_value=10,
-        value=2,
+        value=1,
         step=1,
         key="num_groups",
     )
@@ -375,6 +377,8 @@ def render_checker():
 
 def main():
     st.set_page_config(page_title="Lotofácil — Gerador & Conferidor", page_icon="🎱", layout="wide")
+    if LOGO_PATH.exists():
+        st.image(str(LOGO_PATH), width=360)
     st.title("Lotofácil")
     st.markdown("Gerador de combinações e conferidor de jogos.")
 
