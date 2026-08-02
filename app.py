@@ -1,14 +1,42 @@
 import itertools
+import math
 import re
 from itertools import combinations
 
 import requests
 import streamlit as st
 
-LOTOFACIL_TOTAL = 15
 LOTOFACIL_MIN = 1
 LOTOFACIL_MAX = 25
+ALL_NUMBERS = list(range(LOTOFACIL_MIN, LOTOFACIL_MAX + 1))
 API_URL = "https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest"
+
+NUMBER_BUTTON_CSS = """
+<style>
+    div[data-testid="column"] button[kind="primary"],
+    div[data-testid="column"] button[kind="primaryFormSubmit"] {
+        background-color: #9333ea !important;
+        border-color: #7e22ce !important;
+        color: #ffffff !important;
+        border-radius: 50% !important;
+        min-height: 2.75rem !important;
+        font-weight: 700 !important;
+    }
+    div[data-testid="column"] button[kind="secondary"] {
+        background-color: #f3f4f6 !important;
+        border-color: #d1d5db !important;
+        color: #374151 !important;
+        border-radius: 50% !important;
+        min-height: 2.75rem !important;
+        font-weight: 600 !important;
+    }
+    div[data-testid="column"] button[kind="secondary"]:hover {
+        background-color: #e5e7eb !important;
+        border-color: #9333ea !important;
+        color: #6b21a8 !important;
+    }
+</style>
+"""
 
 
 def parse_numbers(text: str) -> list[int]:
@@ -29,32 +57,109 @@ def parse_game_line(line: str) -> list[int] | None:
     return sorted(set(numbers))
 
 
+def init_selection(key: str) -> None:
+    if key not in st.session_state:
+        st.session_state[key] = set()
+
+
+def toggle_number(key: str, num: int) -> None:
+    init_selection(key)
+    if num in st.session_state[key]:
+        st.session_state[key].discard(num)
+    else:
+        st.session_state[key].add(num)
+
+
+def get_selection(key: str) -> list[int]:
+    init_selection(key)
+    return sorted(st.session_state[key])
+
+
+def render_number_selector(key: str, label: str) -> list[int]:
+    init_selection(key)
+    st.markdown(f"**{label}**")
+
+    for row_start in range(0, 25, 5):
+        cols = st.columns(5)
+        for col_idx, num in enumerate(range(row_start + 1, row_start + 6)):
+            with cols[col_idx]:
+                is_selected = num in st.session_state[key]
+                if st.button(
+                    f"{num:02d}",
+                    key=f"btn_{key}_{num}",
+                    type="primary" if is_selected else "secondary",
+                    use_container_width=True,
+                ):
+                    toggle_number(key, num)
+                    st.rerun()
+
+    selected = get_selection(key)
+    if selected:
+        st.caption(f"Selecionados ({len(selected)}): {', '.join(f'{n:02d}' for n in selected)}")
+    else:
+        st.caption("Nenhuma dezena selecionada.")
+    return selected
+
+
 def generate_combinations(fixed: list[int], groups: list[tuple[list[int], int]]) -> list[list[int]]:
+    fixed_unique = sorted(set(fixed))
+
+    if not groups:
+        return [fixed_unique] if fixed_unique else []
+
     group_combos = []
     for numbers, pick in groups:
         unique = sorted(set(numbers))
+        if pick < 0:
+            raise ValueError("A quantidade a escolher não pode ser negativa.")
         if pick > len(unique):
             raise ValueError(
-                f"Grupo {numbers}: escolher {pick} dezenas, mas só há {len(unique)} disponíveis."
+                f"Grupo [{', '.join(f'{n:02d}' for n in unique)}]: "
+                f"escolher {pick} dezenas, mas só há {len(unique)} disponíveis."
             )
         group_combos.append(list(combinations(unique, pick)))
 
     games = []
     for picks in itertools.product(*group_combos):
-        game = sorted(set(fixed + [n for group in picks for n in group]))
-        if len(game) == LOTOFACIL_TOTAL:
-            games.append(game)
+        game = sorted(set(fixed_unique + [n for group in picks for n in group]))
+        games.append(game)
     return games
 
 
-def validate_numbers(numbers: list[int], label: str) -> list[str]:
-    errors = []
-    for n in numbers:
-        if n < LOTOFACIL_MIN or n > LOTOFACIL_MAX:
-            errors.append(f"{label}: dezena {n} fora do intervalo ({LOTOFACIL_MIN}-{LOTOFACIL_MAX}).")
-    if len(numbers) != len(set(numbers)):
-        errors.append(f"{label}: há dezenas repetidas.")
-    return errors
+def expected_combination_count(groups: list[tuple[list[int], int]]) -> int:
+    total = 1
+    for numbers, pick in groups:
+        n = len(set(numbers))
+        if pick > n or pick < 0:
+            return 0
+        total *= math.comb(n, pick)
+    return total
+
+
+def configured_dezenas_count(fixed: list[int], groups: list[tuple[list[int], int]]) -> int:
+    return len(set(fixed)) + sum(pick for _, pick in groups)
+
+
+def find_overlap_warnings(fixed: list[int], groups: list[tuple[list[int], int]]) -> list[str]:
+    warnings = []
+    fixed_set = set(fixed)
+
+    seen_in_groups: set[int] = set()
+    for idx, (numbers, _) in enumerate(groups, start=1):
+        group_set = set(numbers)
+        overlap_fixed = group_set & fixed_set
+        if overlap_fixed:
+            nums = ", ".join(f"{n:02d}" for n in sorted(overlap_fixed))
+            warnings.append(f"Grupo {idx} repete dezenas fixas: {nums}.")
+
+        overlap_groups = group_set & seen_in_groups
+        if overlap_groups:
+            nums = ", ".join(f"{n:02d}" for n in sorted(overlap_groups))
+            warnings.append(f"Grupo {idx} repete dezenas de outro grupo: {nums}.")
+
+        seen_in_groups |= group_set
+
+    return warnings
 
 
 def fetch_latest_result() -> dict:
@@ -68,63 +173,65 @@ def count_hits(game: list[int], drawn: set[int]) -> int:
 
 
 def render_generator():
+    st.markdown(NUMBER_BUTTON_CSS, unsafe_allow_html=True)
+
     st.subheader("Gerador de Combinações")
     st.caption(
-        "Informe as dezenas fixas (presentes em todos os jogos) e os grupos variáveis "
-        f"(dezenas + quantidade a escolher). Cada jogo deve ter {LOTOFACIL_TOTAL} dezenas."
+        "Selecione as dezenas fixas e configure grupos variáveis. "
+        "Clique nos botões para marcar ou desmarcar cada dezena."
     )
 
-    fixed_text = st.text_input(
-        "Dezenas fixas",
-        placeholder="Ex: 01, 05, 10, 15, 20",
-        help="Dezenas que entram em todos os jogos gerados.",
-    )
+    fixed = render_number_selector("fixed_nums", "Dezenas fixas")
 
     st.markdown("**Grupos variáveis**")
-    num_groups = st.number_input("Quantidade de grupos", min_value=0, max_value=10, value=2, step=1)
+    num_groups = st.number_input(
+        "Quantidade de grupos",
+        min_value=0,
+        max_value=10,
+        value=2,
+        step=1,
+        key="num_groups",
+    )
 
-    groups = []
+    groups: list[tuple[list[int], int]] = []
     for i in range(int(num_groups)):
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            group_text = st.text_input(
-                f"Grupo {i + 1} — dezenas",
-                key=f"group_nums_{i}",
-                placeholder="Ex: 02, 03, 04, 06, 07",
+        st.divider()
+        st.markdown(f"**Grupo {i + 1}**")
+        group_nums = render_number_selector(f"group_nums_{i}", f"Dezenas do grupo {i + 1}")
+
+        max_pick = len(group_nums)
+        pick = st.number_input(
+            "Quantidade a escolher neste grupo",
+            min_value=0,
+            max_value=max(max_pick, 0),
+            value=min(1, max_pick) if max_pick else 0,
+            key=f"group_pick_{i}",
+        )
+
+        if group_nums:
+            groups.append((group_nums, int(pick)))
+
+    dezenas_config = configured_dezenas_count(fixed, groups)
+    combo_count = expected_combination_count(groups) if groups else (1 if fixed else 0)
+
+    m1, m2 = st.columns(2)
+    m1.metric("Dezenas por combinação (configurado)", dezenas_config)
+    m2.metric("Combinações previstas", f"{combo_count:,}".replace(",", "."))
+
+    overlap_warnings = find_overlap_warnings(fixed, groups)
+    if overlap_warnings:
+        for warning in overlap_warnings:
+            st.warning(
+                f"{warning} Isso reduz a quantidade de dezenas únicas em cada jogo gerado."
             )
-        with col2:
-            pick = st.number_input(
-                f"Escolher",
-                min_value=1,
-                max_value=LOTOFACIL_TOTAL,
-                value=1,
-                key=f"group_pick_{i}",
-            )
-        if group_text.strip():
-            groups.append((parse_numbers(group_text), int(pick)))
 
     if st.button("Gerar combinações", type="primary"):
-        fixed = parse_numbers(fixed_text)
-        errors = validate_numbers(fixed, "Dezenas fixas")
+        if not fixed and not groups:
+            st.error("Selecione ao menos dezenas fixas ou configure um grupo variável.")
+            return
 
-        total_picks = len(fixed) + sum(pick for _, pick in groups)
-        if total_picks != LOTOFACIL_TOTAL:
-            errors.append(
-                f"Total de dezenas deve ser {LOTOFACIL_TOTAL} "
-                f"(fixas + escolhas dos grupos). Atual: {total_picks}."
-            )
-
-        all_used = fixed[:]
-        for idx, (nums, pick) in enumerate(groups, start=1):
-            errors.extend(validate_numbers(nums, f"Grupo {idx}"))
-            all_used.extend(nums)
-
-        if len(all_used) != len(set(all_used)):
-            errors.append("Há dezenas repetidas entre fixas e grupos.")
-
-        if errors:
-            for err in errors:
-                st.error(err)
+        if groups and combo_count == 0:
+            st.error("Revise os grupos variáveis: quantidade a escolher inválida.")
             return
 
         try:
@@ -134,25 +241,34 @@ def render_generator():
             return
 
         if not games:
-            st.warning("Nenhuma combinação válida encontrada.")
+            st.warning("Nenhuma combinação gerada.")
             return
 
         st.session_state["generated_games"] = games
+        st.session_state["generated_games_txt"] = "\n".join(format_game(g) for g in games)
         st.success(f"{len(games):,} combinação(ões) gerada(s)!".replace(",", "."))
 
-    if "generated_games" in st.session_state:
+    if st.session_state.get("generated_games"):
         games = st.session_state["generated_games"]
         st.info(f"**{len(games):,}** jogos prontos para download.".replace(",", "."))
 
-        preview = min(10, len(games))
-        st.markdown(f"**Prévia** (primeiros {preview} jogos):")
-        for game in games[:preview]:
+        unique_sizes = sorted({len(g) for g in games})
+        if len(unique_sizes) == 1:
+            st.caption(f"Cada jogo terá **{unique_sizes[0]}** dezenas únicas.")
+        else:
+            st.caption(
+                "Tamanho dos jogos (dezenas únicas): "
+                + ", ".join(str(size) for size in unique_sizes)
+            )
+
+        preview_count = min(10, len(games))
+        st.markdown(f"**Prévia** (primeiros {preview_count} de {len(games)} jogos):")
+        for game in games[:preview_count]:
             st.text(format_game(game))
 
-        txt_content = "\n".join(format_game(g) for g in games)
         st.download_button(
-            label="Baixar jogos (.txt)",
-            data=txt_content,
+            label="Baixar todos os jogos (.txt)",
+            data=st.session_state["generated_games_txt"],
             file_name="jogos_lotofacil.txt",
             mime="text/plain",
         )
@@ -179,7 +295,11 @@ def render_checker():
         )
 
     st.markdown("**Seus jogos**")
-    input_method = st.radio("Como enviar os jogos?", ["Colar texto", "Enviar arquivo .txt"], horizontal=True)
+    input_method = st.radio(
+        "Como enviar os jogos?",
+        ["Colar texto", "Enviar arquivo .txt"],
+        horizontal=True,
+    )
 
     games_text = ""
     if input_method == "Colar texto":
@@ -210,11 +330,11 @@ def render_checker():
             game = parse_game_line(line)
             if game is None:
                 continue
-            if len(game) != LOTOFACIL_TOTAL:
-                invalid_lines.append(f"Linha {idx}: {len(game)} dezenas (esperado {LOTOFACIL_TOTAL}).")
+            if len(game) < 1:
+                invalid_lines.append(f"Linha {idx}: jogo vazio.")
                 continue
             hits = count_hits(game, drawn_set)
-            results.append({"Jogo": format_game(game), "Acertos": hits})
+            results.append({"Jogo": format_game(game), "Dezenas": len(game), "Acertos": hits})
 
         if invalid_lines:
             for msg in invalid_lines:
