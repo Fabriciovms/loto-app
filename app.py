@@ -46,7 +46,7 @@ def parse_numbers(text: str) -> list[int]:
 
 
 def format_game(numbers: list[int]) -> str:
-    return ",".join(f"{n:02d}" for n in sorted(numbers))
+    return ",".join(f"{n:02d}" for n in numbers)
 
 
 def parse_game_line(line: str) -> list[int] | None:
@@ -61,20 +61,38 @@ def parse_game_line(line: str) -> list[int] | None:
 
 def init_selection(key: str) -> None:
     if key not in st.session_state:
-        st.session_state[key] = set()
+        st.session_state[key] = []
+    elif isinstance(st.session_state[key], set):
+        # Compatibilidade com seleções guardadas antes de a ordem dos cliques ser registrada.
+        st.session_state[key] = sorted(st.session_state[key])
+
+
+def selection_priority(key: str) -> int | None:
+    return st.session_state.get("selection_priorities", {}).get(key)
 
 
 def toggle_number(key: str, num: int) -> None:
     init_selection(key)
     if num in st.session_state[key]:
-        st.session_state[key].discard(num)
+        st.session_state[key].remove(num)
+        if not st.session_state[key]:
+            st.session_state.get("selection_priorities", {}).pop(key, None)
     else:
-        st.session_state[key].add(num)
+        if not st.session_state[key]:
+            priorities = st.session_state.setdefault("selection_priorities", {})
+            priorities[key] = st.session_state.get("selection_priority_counter", 0)
+            st.session_state["selection_priority_counter"] = priorities[key] + 1
+        st.session_state[key].append(num)
 
 
 def get_selection(key: str) -> list[int]:
     init_selection(key)
-    return sorted(st.session_state[key])
+    return st.session_state[key].copy()
+
+
+def unique_in_selection_order(numbers: list[int]) -> list[int]:
+    """Remove duplicatas preservando a ordem em que as dezenas foram selecionadas."""
+    return list(dict.fromkeys(numbers))
 
 
 def render_number_selector(key: str, label: str) -> list[int]:
@@ -103,15 +121,17 @@ def render_number_selector(key: str, label: str) -> list[int]:
     return selected
 
 
-def generate_combinations(fixed: list[int], groups: list[tuple[list[int], int]]) -> list[list[int]]:
-    fixed_unique = sorted(set(fixed))
+def generate_combinations(
+    fixed: list[int], groups: list[tuple[list[int], int]], fixed_first: bool = True
+) -> list[list[int]]:
+    fixed_unique = unique_in_selection_order(fixed)
 
     if not groups:
         return [fixed_unique] if fixed_unique else []
 
     group_combos = []
     for numbers, pick in groups:
-        unique = sorted(set(numbers))
+        unique = unique_in_selection_order(numbers)
         if pick < 0:
             raise ValueError("A quantidade a escolher não pode ser negativa.")
         if pick > len(unique):
@@ -123,7 +143,9 @@ def generate_combinations(fixed: list[int], groups: list[tuple[list[int], int]])
 
     games = []
     for picks in itertools.product(*group_combos):
-        game = sorted(set(fixed_unique + [n for group in picks for n in group]))
+        variable_numbers = [n for group in picks for n in group]
+        numbers = fixed_unique + variable_numbers if fixed_first else variable_numbers + fixed_unique
+        game = unique_in_selection_order(numbers)
         games.append(game)
     return games
 
@@ -227,6 +249,20 @@ def render_generator():
                 f"{warning} Isso reduz a quantidade de dezenas únicas em cada jogo gerado."
             )
 
+    variable_priorities = [
+        priority
+        for i in range(int(num_groups))
+        if (priority := selection_priority(f"group_nums_{i}")) is not None
+    ]
+    fixed_priority = selection_priority("fixed_nums")
+    fixed_first = not variable_priorities or (
+        fixed_priority is None or fixed_priority < min(variable_priorities)
+    )
+
+    if fixed and groups:
+        first_group = "fixas" if fixed_first else "variáveis"
+        st.caption(f"No TXT, as dezenas {first_group} aparecerão primeiro.")
+
     if st.button("Gerar combinações", type="primary"):
         if not fixed and not groups:
             st.error("Selecione ao menos dezenas fixas ou configure um grupo variável.")
@@ -237,7 +273,7 @@ def render_generator():
             return
 
         try:
-            games = generate_combinations(fixed, groups)
+            games = generate_combinations(fixed, groups, fixed_first=fixed_first)
         except ValueError as exc:
             st.error(str(exc))
             return
