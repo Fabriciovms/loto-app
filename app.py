@@ -857,7 +857,7 @@ def build_games_pdf(games: list[list[int]]) -> bytes:
         page_object_numbers.append(page_number)
     objects[1] = ("<< /Type /Pages /Kids [" + " ".join(f"{number} 0 R" for number in page_object_numbers) + f"] /Count {len(page_object_numbers)} >>").encode()
 
-    output = bytearray(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
+    output = bytearray(b"%PDF-1.4\n%" + bytes([0xE2, 0xE3, 0xCF, 0xD3]) + b"\n")
     offsets = [0]
     for index, obj in enumerate(objects, start=1):
         offsets.append(len(output))
