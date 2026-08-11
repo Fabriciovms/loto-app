@@ -3,7 +3,6 @@ import math
 import re
 from datetime import date, datetime, timedelta
 from itertools import combinations
-from pathlib import Path
 
 import requests
 import streamlit as st
@@ -13,78 +12,325 @@ LOTOFACIL_MAX = 25
 ALL_NUMBERS = list(range(LOTOFACIL_MIN, LOTOFACIL_MAX + 1))
 API_URL = "https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest"
 API_CONTEST_URL = "https://loteriascaixa-api.herokuapp.com/api/lotofacil/{contest}"
-LOGO_PATH = Path(__file__).parent / "logo" / "lotoapp.png"
 
 # Tabela vigente da aposta da Lotofácil (CAIXA). Uma aposta com mais de 15
 # dezenas equivale a várias apostas simples e por isso tem preço próprio.
 BET_PRICES = {15: 3.50, 16: 56.00, 17: 476.00, 18: 2856.00, 19: 13566.00, 20: 54264.00}
 
-NUMBER_BUTTON_CSS = """
+MODERN_CSS = """
 <style>
-    [class*="st-key-ticket_"] button {
-        background: #fffef7 !important;
-        border: 1.5px solid #ae496b !important;
-        border-radius: 0 !important;
-        color: #6e2541 !important;
-        box-shadow: inset 0 0 0 2px #fffef7 !important;
-        font-family: Arial, sans-serif !important;
-        font-size: 0.9rem !important;
-        font-weight: 700 !important;
-        height: 2.3rem !important;
-        min-height: 2.3rem !important;
-        padding: 0 !important;
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap');
+
+    /* Fontes Globais e Estilo Base */
+    html, body, [class*="st-"], .stApp {
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
     }
-    [class*="st-key-ticket_"] button:hover {
-        background: #ffe8ef !important;
-        border-color: #6e2541 !important;
+
+    /* Ocultar elementos nativos desnecessários */
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+
+    /* Hero Header Moderno */
+    .hero-container {
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #4c1d95 100%);
+        border-radius: 20px;
+        padding: 2.2rem 2rem;
+        color: #ffffff;
+        box-shadow: 0 15px 35px -5px rgba(76, 29, 149, 0.35);
+        margin-bottom: 1.8rem;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.15);
     }
-    [class*="st-key-ticket_fixed_"] button {
-        background: #762043 !important;
-        border-color: #762043 !important;
-        box-shadow: inset 0 0 0 2px #762043 !important;
-        color: #ffffff !important;
+    .hero-container::before {
+        content: "";
+        position: absolute;
+        top: -50%;
+        right: -10%;
+        width: 300px;
+        height: 300px;
+        background: radial-gradient(circle, rgba(168, 85, 247, 0.3) 0%, rgba(0,0,0,0) 70%);
+        border-radius: 50%;
+        pointer-events: none;
     }
-    [class*="st-key-ticket_variable_"] button {
-        background: #21678a !important;
-        border-color: #21678a !important;
-        box-shadow: inset 0 0 0 2px #21678a !important;
-        color: #ffffff !important;
-    }
-    [class*="st-key-ticket_extra_"] button[kind="primary"] {
-        background: #177b63 !important;
-        border-color: #177b63 !important;
-        box-shadow: inset 0 0 0 2px #177b63 !important;
-        color: #ffffff !important;
-    }
-    div[data-testid="stVerticalBlockBorderWrapper"]:has([class*="st-key-ticket_"]) {
-        background: #f7f8d9 !important;
-        border: 2px solid #8e3158 !important;
-        border-radius: 0.25rem !important;
-        box-shadow: 0 3px 0 #dfc4a4 !important;
-    }
-    .ticket-title {
-        background: linear-gradient(100deg, #762043, #a34169);
-        color: #fff;
-        font: 800 1.25rem/1 Arial, sans-serif;
-        letter-spacing: 0.08em;
-        margin: -0.5rem -0.5rem 0.65rem;
-        padding: 0.75rem 1rem;
-        text-align: center;
-    }
-    .ticket-instruction {
-        color: #6e2541;
+    .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(255, 255, 255, 0.15);
+        backdrop-filter: blur(10px);
+        padding: 4px 14px;
+        border-radius: 20px;
         font-size: 0.78rem;
         font-weight: 700;
-        margin-bottom: 0.6rem;
-        text-align: center;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #e9d5ff;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        margin-bottom: 0.75rem;
     }
-    .ticket-footer {
-        border-top: 1px solid #c48a9c;
-        color: #6e2541;
-        font-size: 0.75rem;
-        margin-top: 0.7rem;
-        padding-top: 0.5rem;
+    .hero-title {
+        font-family: 'Outfit', sans-serif;
+        font-size: 2.4rem;
+        font-weight: 800;
+        margin: 0;
+        line-height: 1.15;
+        background: linear-gradient(120deg, #ffffff 30%, #f3e8ff 70%, #d8b4fe 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .hero-subtitle {
+        color: #c084fc;
+        font-size: 0.98rem;
+        font-weight: 500;
+        margin-top: 0.5rem;
+        margin-bottom: 0;
+    }
+
+    /* Cartela de Dezenas Interativa (Volante) */
+    .ticket-card {
+        background: #ffffff;
+        border-radius: 20px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.06);
+        overflow: hidden;
+        margin: 0 auto;
+        transition: all 0.3s ease;
+    }
+    .ticket-header {
+        background: linear-gradient(135deg, #831843 0%, #be185d 50%, #9d174d 100%);
+        padding: 1rem 1.25rem;
         text-align: center;
+        color: #ffffff;
+    }
+    .ticket-header-title {
+        font-family: 'Outfit', sans-serif;
+        font-size: 1.35rem;
+        font-weight: 800;
+        letter-spacing: 0.12em;
+        margin: 0;
+        text-transform: uppercase;
+    }
+    .ticket-header-sub {
+        font-size: 0.76rem;
+        font-weight: 600;
+        color: #fbcfe8;
+        margin-top: 4px;
+        letter-spacing: 0.04em;
+    }
+    .ticket-body {
+        padding: 1.2rem;
+        background: #fafafa;
+    }
+    .ticket-legend {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 12px;
+        padding: 0.75rem;
+        background: #ffffff;
+        border-top: 1px solid #f1f5f9;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #475569;
+        flex-wrap: wrap;
+    }
+    .legend-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }
+    .legend-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+    }
+    .dot-fixed { background: #be185d; box-shadow: 0 0 6px rgba(190, 24, 93, 0.5); }
+    .dot-variable { background: #2563eb; box-shadow: 0 0 6px rgba(37, 99, 235, 0.5); }
+    .dot-extra { background: #10b981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.5); }
+    .dot-empty { background: #e2e8f0; }
+
+    /* Estilização dos Botões de Dezenas (Pílulas) */
+    [class*="st-key-ticket_"] button {
+        border-radius: 12px !important;
+        font-family: 'Plus Jakarta Sans', sans-serif !important;
+        font-size: 0.95rem !important;
+        font-weight: 700 !important;
+        height: 2.6rem !important;
+        min-height: 2.6rem !important;
+        padding: 0 !important;
+        transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+
+    /* Estado Desmarcado */
+    [class*="st-key-ticket_empty_"] button,
+    [class*="st-key-ticket_fixed_nums_"] button,
+    [class*="st-key-ticket_group_nums_"] button {
+        background: #ffffff !important;
+        border: 1.5px solid #cbd5e1 !important;
+        color: #334155 !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
+    }
+    [class*="st-key-ticket_empty_"] button:hover,
+    [class*="st-key-ticket_fixed_nums_"] button:hover,
+    [class*="st-key-ticket_group_nums_"] button:hover {
+        background: #f1f5f9 !important;
+        border-color: #94a3b8 !important;
+        color: #0f172a !important;
+        transform: translateY(-2px) !important;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.06) !important;
+    }
+
+    /* Estado Dezena Fixa (Vinho / Magenta Glowing) */
+    [class*="st-key-ticket_fixed_"] button {
+        background: linear-gradient(135deg, #831843 0%, #be185d 100%) !important;
+        border: none !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 14px rgba(190, 24, 93, 0.45) !important;
+        transform: translateY(-1px) !important;
+    }
+    [class*="st-key-ticket_fixed_"] button:hover {
+        background: linear-gradient(135deg, #9d174d 0%, #db2777 100%) !important;
+        box-shadow: 0 6px 18px rgba(190, 24, 93, 0.55) !important;
+    }
+
+    /* Estado Dezena Variável (Azul Elétrico Glowing) */
+    [class*="st-key-ticket_variable_"] button {
+        background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
+        border: none !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45) !important;
+        transform: translateY(-1px) !important;
+    }
+    [class*="st-key-ticket_variable_"] button:hover {
+        background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%) !important;
+        box-shadow: 0 6px 18px rgba(37, 99, 235, 0.55) !important;
+    }
+
+    /* Estado Dezena Extra (Verde Esmeralda Glowing) */
+    [class*="st-key-ticket_extra_"] button[kind="primary"],
+    [class*="st-key-ticket_intersection_extra_variables_"] button[kind="primary"] {
+        background: linear-gradient(135deg, #047857 0%, #10b981 100%) !important;
+        border: none !important;
+        color: #ffffff !important;
+        box-shadow: 0 4px 14px rgba(16, 185, 129, 0.45) !important;
+        transform: translateY(-1px) !important;
+    }
+
+    /* Estilização dos Containers & Envoltórios de Borda */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: 16px !important;
+        border: 1px solid #e2e8f0 !important;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03) !important;
+        background: #ffffff !important;
+    }
+
+    /* Estilização de Botões de Ação Principais */
+    .stButton button[kind="primary"] {
+        background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 100%) !important;
+        border: none !important;
+        border-radius: 12px !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        font-size: 1rem !important;
+        padding: 0.6rem 1.2rem !important;
+        box-shadow: 0 4px 14px rgba(109, 40, 217, 0.35) !important;
+        transition: all 0.2s ease !important;
+    }
+    .stButton button[kind="primary"]:hover {
+        background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%) !important;
+        box-shadow: 0 6px 20px rgba(109, 40, 217, 0.5) !important;
+        transform: translateY(-2px) !important;
+    }
+
+    /* Download Buttons */
+    .stDownloadButton button {
+        border-radius: 12px !important;
+        font-weight: 700 !important;
+        border: 1.5px solid #cbd5e1 !important;
+        transition: all 0.2s ease !important;
+    }
+    .stDownloadButton button:hover {
+        border-color: #6d28d9 !important;
+        color: #6d28d9 !important;
+        background: #f5f3ff !important;
+        transform: translateY(-1px) !important;
+    }
+
+    /* Navegação Segmentada (Radio Buttons Horizontal) */
+    div[data-testid="stRadio"] > div[role="radiogroup"] {
+        background: #f1f5f9;
+        padding: 5px;
+        border-radius: 16px;
+        gap: 6px;
+        border: 1px solid #e2e8f0;
+    }
+    div[data-testid="stRadio"] > div[role="radiogroup"] label {
+        background: transparent;
+        padding: 8px 18px;
+        border-radius: 12px;
+        font-weight: 700;
+        font-size: 0.92rem;
+        color: #64748b;
+        transition: all 0.2s ease;
+        border: none !important;
+        cursor: pointer;
+    }
+    div[data-testid="stRadio"] > div[role="radiogroup"] label[data-checked="true"] {
+        background: #ffffff !important;
+        color: #4c1d95 !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+    }
+
+    /* Métricas Reestilizadas */
+    div[data-testid="stMetric"] {
+        background: #ffffff;
+        padding: 1.1rem 1.3rem;
+        border-radius: 16px;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+    }
+    div[data-testid="stMetricLabel"] {
+        font-size: 0.85rem !important;
+        font-weight: 700 !important;
+        color: #64748b !important;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    div[data-testid="stMetricValue"] {
+        font-family: 'Outfit', sans-serif !important;
+        font-size: 1.8rem !important;
+        font-weight: 800 !important;
+        color: #1e1b4b !important;
+    }
+
+    /* Responsividade para Celulares e Tablets */
+    @media (max-width: 768px) {
+        .hero-container {
+            padding: 1.5rem 1.2rem;
+            margin-bottom: 1.2rem;
+        }
+        .hero-title {
+            font-size: 1.75rem;
+        }
+        .hero-subtitle {
+            font-size: 0.88rem;
+        }
+        .ticket-body {
+            padding: 0.6rem;
+        }
+        .ticket-header-title {
+            font-size: 1.15rem;
+        }
+        [class*="st-key-ticket_"] button {
+            height: 2.3rem !important;
+            min-height: 2.3rem !important;
+            font-size: 0.88rem !important;
+            border-radius: 8px !important;
+        }
+        div[data-testid="stRadio"] > div[role="radiogroup"] {
+            flex-direction: column;
+        }
     }
 </style>
 """
@@ -112,7 +358,6 @@ def init_selection(key: str) -> None:
     if key not in st.session_state:
         st.session_state[key] = []
     elif isinstance(st.session_state[key], set):
-        # Compatibilidade com seleções guardadas antes de a ordem dos cliques ser registrada.
         st.session_state[key] = sorted(st.session_state[key])
 
 
@@ -148,38 +393,50 @@ def render_number_selector(key: str, label: str) -> list[int]:
     init_selection(key)
     st.markdown(f"**{label}**")
 
-    # Centraliza o volante e preserva as proporções de uma cartela física.
-    side_left, ticket_column, side_right = st.columns([1, 2.4, 1])
+    side_left, ticket_column, side_right = st.columns([0.2, 3.6, 0.2])
     with ticket_column:
-        with st.container(border=True):
-            st.markdown('<div class="ticket-title">LOTOFÁCIL</div>', unsafe_allow_html=True)
-            st.markdown(
-                '<div class="ticket-instruction">MARQUE DE 15 A 20 NÚMEROS · APOSTA 1</div>',
-                unsafe_allow_html=True,
-            )
-            # A cartela oficial organiza as dezenas em cinco colunas verticais.
-            for row in range(5):
-                cols = st.columns(5, gap="small")
-                for col_idx in range(5):
-                    num = col_idx * 5 + row + 1
-                    with cols[col_idx]:
-                        is_selected = num in st.session_state[key]
-                        if st.button(
-                            f"{num:02d}",
-                            key=f"ticket_{key}_{num}",
-                            type="primary" if is_selected else "secondary",
-                            use_container_width=True,
-                        ):
-                            toggle_number(key, num)
-                            st.rerun()
-            st.markdown(
-                '<div class="ticket-footer">Toque no quadrado da dezena para marcar ou desmarcar.</div>',
-                unsafe_allow_html=True,
-            )
+        st.markdown(
+            """
+            <div class="ticket-card">
+                <div class="ticket-header">
+                    <div class="ticket-header-title">LOTOFÁCIL</div>
+                    <div class="ticket-header-sub">SELEÇÃO DE DEZENAS</div>
+                </div>
+                <div class="ticket-body">
+            """,
+            unsafe_allow_html=True,
+        )
+
+        for row in range(5):
+            cols = st.columns(5, gap="small")
+            for col_idx in range(5):
+                num = col_idx * 5 + row + 1
+                with cols[col_idx]:
+                    is_selected = num in st.session_state[key]
+                    if st.button(
+                        f"{num:02d}",
+                        key=f"ticket_{key}_{num}",
+                        type="primary" if is_selected else "secondary",
+                        use_container_width=True,
+                    ):
+                        toggle_number(key, num)
+                        st.rerun()
+
+        st.markdown(
+            """
+                </div>
+                <div class="ticket-legend">
+                    <span class="legend-item"><span class="legend-dot dot-extra"></span> Selecionada</span>
+                    <span class="legend-item"><span class="legend-dot dot-empty"></span> Livre</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     selected = get_selection(key)
     if selected:
-        st.caption(f"Selecionados ({len(selected)}): {', '.join(f'{n:02d}' for n in selected)}")
+        st.caption(f"Selecionadas ({len(selected)}): {', '.join(f'{n:02d}' for n in selected)}")
     else:
         st.caption("Nenhuma dezena selecionada.")
     return selected
@@ -207,46 +464,60 @@ def cycle_ticket_number(key: str, number: int) -> None:
         return
 
     states[number] = current + 1
-    # Ao mudar de categoria, a dezena passa a valer a partir deste clique.
     order[number] = st.session_state.get("ticket_click_counter", 0)
     st.session_state["ticket_click_counter"] = order[number] + 1
 
 
 def render_unified_ticket(key: str) -> tuple[list[int], list[int], dict[int, int]]:
     fixed, variables, order = ticket_state(key)
-    side_left, ticket_column, side_right = st.columns([1, 2.4, 1])
+    side_left, ticket_column, side_right = st.columns([0.1, 3.8, 0.1])
     with ticket_column:
-        with st.container(border=True):
-            st.markdown('<div class="ticket-title">LOTOFÁCIL</div>', unsafe_allow_html=True)
-            st.markdown(
-                '<div class="ticket-instruction">1º CLIQUE: FIXA · 2º CLIQUE: VARIÁVEL · 3º CLIQUE: DESMARCA</div>',
-                unsafe_allow_html=True,
-            )
-            states = st.session_state[f"{key}_states"]
-            for row in range(5):
-                columns = st.columns(5, gap="small")
-                for column_index in range(5):
-                    number = column_index * 5 + row + 1
-                    state = states.get(number, 0)
-                    state_name = ("empty", "fixed", "variable")[state]
-                    with columns[column_index]:
-                        if st.button(
-                            f"{number:02d}",
-                            key=f"ticket_{state_name}_{key}_{number}",
-                            type="primary" if state else "secondary",
-                            use_container_width=True,
-                        ):
-                            cycle_ticket_number(key, number)
-                            st.rerun()
-            st.markdown(
-                '<div class="ticket-footer"><b>Fixa</b> = vinho · <b>Variável</b> = azul · vazio = não selecionada</div>',
-                unsafe_allow_html=True,
-            )
+        st.markdown(
+            """
+            <div class="ticket-card">
+                <div class="ticket-header">
+                    <div class="ticket-header-title">VOLANTE LOTOFÁCIL</div>
+                    <div class="ticket-header-sub">1º CLIQUE: FIXA · 2º CLIQUE: VARIÁVEL · 3º CLIQUE: DESMARCA</div>
+                </div>
+                <div class="ticket-body">
+            """,
+            unsafe_allow_html=True,
+        )
+
+        states = st.session_state[f"{key}_states"]
+        for row in range(5):
+            columns = st.columns(5, gap="small")
+            for column_index in range(5):
+                number = column_index * 5 + row + 1
+                state = states.get(number, 0)
+                state_name = ("empty", "fixed", "variable")[state]
+                with columns[column_index]:
+                    if st.button(
+                        f"{number:02d}",
+                        key=f"ticket_{state_name}_{key}_{number}",
+                        type="primary" if state else "secondary",
+                        use_container_width=True,
+                    ):
+                        cycle_ticket_number(key, number)
+                        st.rerun()
+
+        st.markdown(
+            """
+                </div>
+                <div class="ticket-legend">
+                    <span class="legend-item"><span class="legend-dot dot-fixed"></span> <b>Fixa</b> (Vinho)</span>
+                    <span class="legend-item"><span class="legend-dot dot-variable"></span> <b>Variável</b> (Azul)</span>
+                    <span class="legend-item"><span class="legend-dot dot-empty"></span> Não selecionada</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     fixed, variables, order = ticket_state(key)
     st.caption(
-        f"Fixas ({len(fixed)}): {', '.join(f'{n:02d}' for n in fixed) or 'nenhuma'}  |  "
-        f"Variáveis ({len(variables)}): {', '.join(f'{n:02d}' for n in variables) or 'nenhuma'}"
+        f"**Fixas ({len(fixed)})**: {', '.join(f'{n:02d}' for n in fixed) or 'nenhuma'}  |  "
+        f"**Variáveis ({len(variables)})**: {', '.join(f'{n:02d}' for n in variables) or 'nenhuma'}"
     )
     return fixed, variables, order
 
@@ -265,29 +536,47 @@ def generate_ticket_combinations(
 def render_extra_ticket(key: str) -> list[int]:
     """Cartela de seleção simples para as dezenas extras do Arquivo C."""
     init_selection(key)
-    side_left, ticket_column, side_right = st.columns([1, 2.4, 1])
+    side_left, ticket_column, side_right = st.columns([0.1, 3.8, 0.1])
     with ticket_column:
-        with st.container(border=True):
-            st.markdown('<div class="ticket-title">VARIAVEIS EXTRAS - ARQUIVO C</div>', unsafe_allow_html=True)
-            st.markdown(
-                '<div class="ticket-instruction">CLIQUE PARA MARCAR OU DESMARCAR AS DEZENAS EXTRAS</div>',
-                unsafe_allow_html=True,
-            )
-            for row in range(5):
-                columns = st.columns(5, gap="small")
-                for column_index in range(5):
-                    number = column_index * 5 + row + 1
-                    with columns[column_index]:
-                        selected = number in st.session_state[key]
-                        if st.button(
-                            f"{number:02d}",
-                            key=f"ticket_extra_{key}_{number}",
-                            type="primary" if selected else "secondary",
-                            use_container_width=True,
-                        ):
-                            toggle_number(key, number)
-                            st.rerun()
-            st.markdown('<div class="ticket-footer">Verde = variavel extra selecionada.</div>', unsafe_allow_html=True)
+        st.markdown(
+            """
+            <div class="ticket-card">
+                <div class="ticket-header" style="background: linear-gradient(135deg, #047857 0%, #10b981 100%);">
+                    <div class="ticket-header-title">VARIÁVEIS EXTRAS</div>
+                    <div class="ticket-header-sub">SELEÇÃO COMPLEMENTAR PARA O ARQUIVO C</div>
+                </div>
+                <div class="ticket-body">
+            """,
+            unsafe_allow_html=True,
+        )
+
+        for row in range(5):
+            columns = st.columns(5, gap="small")
+            for column_index in range(5):
+                number = column_index * 5 + row + 1
+                with columns[column_index]:
+                    selected = number in st.session_state[key]
+                    if st.button(
+                        f"{number:02d}",
+                        key=f"ticket_extra_{key}_{number}",
+                        type="primary" if selected else "secondary",
+                        use_container_width=True,
+                    ):
+                        toggle_number(key, number)
+                        st.rerun()
+
+        st.markdown(
+            """
+                </div>
+                <div class="ticket-legend">
+                    <span class="legend-item"><span class="legend-dot dot-extra"></span> Extra Selecionada</span>
+                    <span class="legend-item"><span class="legend-dot dot-empty"></span> Livre</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
     return get_selection(key)
 
 
@@ -317,13 +606,8 @@ def generate_file_c(
             base = unique_in_selection_order(core_a + core_b)
             needed = target_size - len(base)
             if needed < 0:
-                # Os miolos já excederam o tamanho final configurado; não é
-                # possível reduzir um deles sem descaracterizar A ou B.
                 continue
             candidates = [number for number in extra_variables if number not in base]
-            # Extras são opcionais. Sem dezenas suficientes, preservamos a
-            # junção A+B (e as extras já escolhidas) para o usuário completar
-            # depois, exibindo o aviso de que o jogo ainda não é válido.
             extra_picks = (
                 combinations(candidates, needed)
                 if needed <= len(candidates)
@@ -443,7 +727,6 @@ def result_date(result: dict) -> date:
 
 
 def fetch_results_for_dates(start: date, end: date) -> list[dict]:
-    """Busca concursos pela faixa de datas, partindo do último publicado."""
     latest = fetch_latest_result()
     current = latest
     results = []
@@ -462,7 +745,6 @@ def fetch_results_for_dates(start: date, end: date) -> list[dict]:
 
 
 def fetch_recent_results(count: int = 10) -> list[dict]:
-    """Busca os últimos concursos publicados, incluindo o mais recente."""
     latest = fetch_latest_result()
     results = [latest]
     for contest in range(int(latest["concurso"]) - 1, int(latest["concurso"]) - count, -1):
@@ -477,7 +759,6 @@ def count_hits(game: list[int], drawn: set[int]) -> int:
 
 
 def prize_units(game_size: int, hits: int) -> dict[int, int]:
-    """Quantidade de apostas premiadas embutidas em uma aposta múltipla."""
     if game_size not in BET_PRICES:
         return {points: 0 for points in range(11, 16)}
     misses = game_size - hits
@@ -520,20 +801,17 @@ def pdf_rect(x: float, y_top: float, width: float, height: float, color: str, fi
 
 
 def draw_pdf_game_card(game: list[int], game_number: int, top: float) -> str:
-    """Desenha uma cartela de conferência; não replica nem substitui volante oficial."""
     x, width, height = 38, 519, 228
     commands = [
-        pdf_rect(x, top, width, height, "0.97 0.97 0.86"),
-        pdf_rect(x, top, width, height, "0.45 0.12 0.27", fill=False),
-        pdf_rect(x, top, width, 30, "0.45 0.12 0.27"),
+        pdf_rect(x, top, width, height, "0.98 0.98 0.99"),
+        pdf_rect(x, top, width, height, "0.40 0.10 0.30", fill=False),
+        pdf_rect(x, top, width, 30, "0.40 0.10 0.30"),
         pdf_text(x + 16, top + 20, "LOTOFACIL - FOLHA DE CONFERENCIA", 13, "1 1 1"),
         pdf_text(x + 360, top + 19, f"JOGO {game_number:03d}", 10, "1 1 1"),
-        pdf_text(x + 18, top + 51, "NAO OFICIAL - NAO VALIDA PARA REGISTRO", 8, "0.45 0.12 0.27"),
-        pdf_text(x + 18, top + 68, "Dezenas marcadas", 9, "0.30 0.15 0.22"),
+        pdf_text(x + 18, top + 51, "NAO OFICIAL - NAO VALIDA PARA REGISTRO", 8, "0.40 0.10 0.30"),
+        pdf_text(x + 18, top + 68, "Dezenas marcadas", 9, "0.20 0.10 0.20"),
     ]
     selected = set(game)
-    # Grade inteira cabe dentro do cartão: 5 colunas x 5 linhas, sem invadir
-    # o rodapé nem a cartela seguinte.
     cell_width, cell_height = 45, 25
     gap_x, gap_y = 7, 5
     grid_width = cell_width * 5 + gap_x * 4
@@ -545,13 +823,13 @@ def draw_pdf_game_card(game: list[int], game_number: int, top: float) -> str:
             cell_x = grid_x + column * (cell_width + gap_x)
             cell_y = grid_y + row * (cell_height + gap_y)
             marked = number in selected
-            commands.append(pdf_rect(cell_x, cell_y, cell_width, cell_height, "0.45 0.12 0.27" if marked else "1 1 1"))
-            commands.append(pdf_rect(cell_x, cell_y, cell_width, cell_height, "0.62 0.25 0.40", fill=False))
-            label_color = "1 1 1" if marked else "0.45 0.12 0.27"
+            commands.append(pdf_rect(cell_x, cell_y, cell_width, cell_height, "0.40 0.10 0.30" if marked else "1 1 1"))
+            commands.append(pdf_rect(cell_x, cell_y, cell_width, cell_height, "0.60 0.20 0.45", fill=False))
+            label_color = "1 1 1" if marked else "0.40 0.10 0.30"
             commands.append(pdf_text(cell_x + 14, cell_y + 17, f"{number:02d}", 10, label_color))
     commands.extend([
-        pdf_text(x + 18, top + 212, "Jogo:", 8, "0.30 0.15 0.22"),
-        pdf_text(x + 55, top + 212, " ".join(f"{number:02d}" for number in game), 8, "0.30 0.15 0.22"),
+        pdf_text(x + 18, top + 212, "Jogo:", 8, "0.20 0.10 0.20"),
+        pdf_text(x + 55, top + 212, " ".join(f"{number:02d}" for number in game), 8, "0.20 0.10 0.20"),
         pdf_text(x + 18, top + 224, "Use esta folha apenas para organizacao e conferencia pessoal.", 7, "0.35 0.35 0.35"),
     ])
     return "\n".join(commands)
@@ -564,8 +842,6 @@ def build_games_pdf(games: list[list[int]]) -> bytes:
         commands = [pdf_text(38, 25, "Jogos Lotofacil - conferencia pessoal", 12, "0.25 0.12 0.20")]
         for offset, game in enumerate(games[first_game:first_game + 3]):
             commands.append(draw_pdf_game_card(game, first_game + offset + 1, 48 + offset * 245))
-        # Helvetica padrão usa a tabela WinAnsi; cp1252 preserva os acentos
-        # em português sem introduzir caracteres de substituição.
         page_streams.append("\n".join(commands).encode("cp1252", "replace"))
 
     objects = [b"<< /Type /Catalog /Pages 2 0 R >>", None, b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
@@ -595,146 +871,14 @@ def build_games_pdf(games: list[list[int]]) -> bytes:
     return bytes(output)
 
 
-def render_generator_legacy():
-    st.markdown(NUMBER_BUTTON_CSS, unsafe_allow_html=True)
-
-    st.subheader("Gerador de Combinações")
-    st.caption(
-        "Selecione as dezenas fixas e configure grupos variáveis. "
-        "Clique nos botões para marcar ou desmarcar cada dezena."
-    )
-
-    fixed = render_number_selector("fixed_nums", "Dezenas fixas")
-
-    st.markdown("**Grupos variáveis**")
-    num_groups = st.number_input(
-        "Quantidade de grupos",
-        min_value=0,
-        max_value=10,
-        value=1,
-        step=1,
-        key="num_groups",
-    )
-
-    groups: list[tuple[list[int], int]] = []
-    for i in range(int(num_groups)):
-        st.divider()
-        st.markdown(f"**Grupo {i + 1}**")
-        group_nums = render_number_selector(f"group_nums_{i}", f"Dezenas do grupo {i + 1}")
-
-        max_pick = len(group_nums)
-        pick = st.number_input(
-            "Quantidade a escolher neste grupo",
-            min_value=0,
-            max_value=max(max_pick, 0),
-            value=min(1, max_pick) if max_pick else 0,
-            key=f"group_pick_{i}",
-        )
-
-        if group_nums:
-            groups.append((group_nums, int(pick)))
-
-    dezenas_config = configured_dezenas_count(fixed, groups)
-    combo_count = expected_combination_count(groups) if groups else (1 if fixed else 0)
-
-    m1, m2 = st.columns(2)
-    m1.metric("Dezenas por combinação (configurado)", dezenas_config)
-    m2.metric("Combinações previstas", f"{combo_count:,}".replace(",", "."))
-
-    overlap_warnings = find_overlap_warnings(fixed, groups)
-    if overlap_warnings:
-        for warning in overlap_warnings:
-            st.warning(
-                f"{warning} Isso reduz a quantidade de dezenas únicas em cada jogo gerado."
-            )
-
-    variable_priorities = [
-        priority
-        for i in range(int(num_groups))
-        if (priority := selection_priority(f"group_nums_{i}")) is not None
-    ]
-    fixed_priority = selection_priority("fixed_nums")
-    fixed_first = not variable_priorities or (
-        fixed_priority is None or fixed_priority < min(variable_priorities)
-    )
-
-    if fixed and groups:
-        first_group = "fixas" if fixed_first else "variáveis"
-        st.caption(f"No TXT, as dezenas {first_group} aparecerão primeiro.")
-
-    generate_column, checker_column = st.columns(2)
-    generate_clicked = generate_column.button("Gerar combinações", type="primary", use_container_width=True)
-    open_checker = checker_column.button(
-        "Conferir jogos gerados", use_container_width=True,
-        help="Abre o conferidor, usa os jogos gerados e consulta os 10 últimos concursos.",
-    )
-
-    if open_checker:
-        generated_text = st.session_state.get("generated_games_txt")
-        if not generated_text:
-            st.warning("Gere as combinações antes de enviá-las ao conferidor.")
-        else:
-            st.session_state["checker_games_text"] = generated_text
-            st.session_state["checker_input_method"] = "Colar texto"
-            st.session_state["active_section"] = "Conferidor"
-            st.session_state["auto_check_pending"] = True
-            st.rerun()
-
-    if generate_clicked:
-        if not fixed and not groups:
-            st.error("Selecione ao menos dezenas fixas ou configure um grupo variável.")
-            return
-
-        if groups and combo_count == 0:
-            st.error("Revise os grupos variáveis: quantidade a escolher inválida.")
-            return
-
-        try:
-            games = generate_combinations(fixed, groups, fixed_first=fixed_first)
-        except ValueError as exc:
-            st.error(str(exc))
-            return
-
-        if not games:
-            st.warning("Nenhuma combinação gerada.")
-            return
-
-        st.session_state["generated_games"] = games
-        st.session_state["generated_games_txt"] = "\n".join(format_game(g) for g in games)
-        st.success(f"{len(games):,} combinação(ões) gerada(s)!".replace(",", "."))
-
-    if st.session_state.get("generated_games"):
-        games = st.session_state["generated_games"]
-        st.info(f"**{len(games):,}** jogos prontos para download.".replace(",", "."))
-
-        unique_sizes = sorted({len(g) for g in games})
-        if len(unique_sizes) == 1:
-            st.caption(f"Cada jogo terá **{unique_sizes[0]}** dezenas únicas.")
-        else:
-            st.caption(
-                "Tamanho dos jogos (dezenas únicas): "
-                + ", ".join(str(size) for size in unique_sizes)
-            )
-
-        preview_count = min(10, len(games))
-        st.markdown(f"**Prévia** (primeiros {preview_count} de {len(games)} jogos):")
-        for game in games[:preview_count]:
-            st.text(format_game(game))
-
-        st.download_button(
-            label="Baixar todos os jogos (.txt)",
-            data=st.session_state["generated_games_txt"],
-            file_name="jogos_lotofacil.txt",
-            mime="text/plain",
-        )
-
-
 def render_generator():
-    st.markdown(NUMBER_BUTTON_CSS, unsafe_allow_html=True)
+    st.markdown(MODERN_CSS, unsafe_allow_html=True)
     st.subheader("Gerador de Combinações")
-    st.caption("Use uma única cartela: primeiro clique fixa a dezena, segundo clique a torna variável e terceiro clique a remove.")
+    st.caption("Marque as dezenas no volante interativo: 1º clique fixa a dezena (vinho), 2º clique torna variável (azul) e 3º clique remove.")
 
     fixed, variables, order = render_unified_ticket("main_ticket")
+    
+    st.markdown("---")
     variable_pick = st.number_input(
         "Quantas dezenas variáveis entram em cada cartela gerada?",
         min_value=0,
@@ -746,18 +890,20 @@ def render_generator():
 
     configured_count = len(fixed) + int(variable_pick)
     combination_count = math.comb(len(variables), int(variable_pick)) if variables else (1 if fixed else 0)
+    
     first_metric, second_metric = st.columns(2)
-    first_metric.metric("Dezenas por cartela", configured_count)
-    second_metric.metric("Combinações previstas", f"{combination_count:,}".replace(",", "."))
+    first_metric.metric("Dezenas por Cartela", configured_count)
+    second_metric.metric("Combinações Previstas", f"{combination_count:,}".replace(",", "."))
 
     if configured_count and not 15 <= configured_count <= 20:
         st.warning("Uma aposta Lotofácil válida deve ter entre 15 e 20 dezenas por cartela.")
 
+    st.markdown("<br>", unsafe_allow_html=True)
     generate_column, checker_column = st.columns(2)
-    generate_clicked = generate_column.button("Gerar combinações", type="primary", use_container_width=True)
+    generate_clicked = generate_column.button("⚡ Gerar Combinações", type="primary", use_container_width=True)
     checker_column.button(
-        "Conferir jogos gerados", use_container_width=True,
-        help="Abre o conferidor, usa os jogos gerados e consulta os 10 últimos concursos.",
+        "🔍 Conferir Jogos Gerados", use_container_width=True,
+        help="Abre o conferidor, carrega os jogos gerados e busca os últimos resultados.",
         on_click=open_generated_games_in_checker,
     )
     if st.session_state.pop("checker_navigation_error", False):
@@ -779,42 +925,43 @@ def render_generator():
             return
         st.session_state["generated_games"] = games
         st.session_state["generated_games_txt"] = "\n".join(format_game(game) for game in games)
-        st.success(f"{len(games):,} combinação(ões) gerada(s)!".replace(",", "."))
+        st.success(f"🎉 {len(games):,} combinação(ões) gerada(s) com sucesso!".replace(",", "."))
 
     if st.session_state.get("generated_games"):
         games = st.session_state["generated_games"]
-        st.info(f"**{len(games):,}** jogos prontos para download.".replace(",", "."))
+        st.info(f"✨ **{len(games):,}** jogos prontos para download.".replace(",", "."))
         unique_sizes = sorted({len(game) for game in games})
         st.caption("Dezenas por jogo: " + ", ".join(str(size) for size in unique_sizes))
         preview_count = min(10, len(games))
         st.markdown(f"**Prévia** (primeiros {preview_count} de {len(games)} jogos):")
         for game in games[:preview_count]:
-            st.text(format_game(game))
+            st.code(format_game(game), language="text")
+            
         text_column, pdf_column = st.columns(2)
         text_column.download_button(
-            label="Baixar todos os jogos (.txt)",
+            label="📄 Baixar todos os jogos (.txt)",
             data=st.session_state["generated_games_txt"],
             file_name="jogos_lotofacil.txt",
             mime="text/plain",
             use_container_width=True,
         )
         pdf_column.download_button(
-            label="Baixar todos os jogos Loto (.pdf)",
+            label="🖨️ Baixar Folha Loto (.pdf)",
             data=build_games_pdf(games),
-            file_name="jogos_lotofacil_conferencia_nao_oficial.pdf",
+            file_name="jogos_lotofacil_conferencia.pdf",
             mime="application/pdf",
             use_container_width=True,
-            help="PDF para organização e conferência pessoal; não é um volante válido para registrar apostas.",
+            help="PDF para organização e conferência pessoal.",
         )
 
 
 def render_intersection_group(letter: str) -> None:
     state_prefix = f"intersection_{letter.lower()}"
     st.markdown(f"### Arquivo {letter}")
-    st.caption("Primeiro clique = fixa (vinho); segundo clique = variavel (azul).")
+    st.caption("1º clique = fixa (vinho); 2º clique = variável (azul).")
     fixed, variables, order = render_unified_ticket(f"{state_prefix}_ticket")
     pick = st.number_input(
-        f"Variaveis por jogo do Arquivo {letter}",
+        f"Variáveis por jogo do Arquivo {letter}",
         min_value=0,
         max_value=len(variables),
         value=min(1, len(variables)) if variables else 0,
@@ -823,12 +970,12 @@ def render_intersection_group(letter: str) -> None:
     total = len(fixed) + int(pick)
     count = math.comb(len(variables), int(pick)) if variables else (1 if fixed else 0)
     metric_a, metric_b = st.columns(2)
-    metric_a.metric("Dezenas por aposta", total)
-    metric_b.metric("Jogos previstos", f"{count:,}".replace(",", "."))
+    metric_a.metric("Dezenas por Aposta", total)
+    metric_b.metric("Jogos Previstos", f"{count:,}".replace(",", "."))
     if total and total not in BET_PRICES:
         st.warning("Cada jogo de A ou B deve ter de 15 a 20 dezenas.")
 
-    if st.button(f"Gerar Arquivo {letter}", key=f"generate_{state_prefix}", type="primary"):
+    if st.button(f"🚀 Gerar Arquivo {letter}", key=f"generate_{state_prefix}", type="primary"):
         if total not in BET_PRICES:
             st.error("Configure de 15 a 20 dezenas por jogo antes de gerar.")
         else:
@@ -840,7 +987,7 @@ def render_intersection_group(letter: str) -> None:
     games = st.session_state.get(f"{state_prefix}_games", [])
     if games:
         st.download_button(
-            f"Baixar Arquivo {letter} (.txt)",
+            f"📄 Baixar Arquivo {letter} (.txt)",
             data="\n".join(format_game(game) for game in games),
             file_name=f"arquivo_{letter.lower()}_lotofacil.txt",
             mime="text/plain",
@@ -849,24 +996,24 @@ def render_intersection_group(letter: str) -> None:
 
 
 def render_intersection_module():
-    st.markdown(NUMBER_BUTTON_CSS, unsafe_allow_html=True)
-    st.subheader("Modulo A/B/C - Intersecao e Variaveis Extras")
-    st.caption("Gere A e B; no Passo 3 o sistema usa somente os miolos variaveis e acrescenta as dezenas extras selecionadas.")
+    st.markdown(MODERN_CSS, unsafe_allow_html=True)
+    st.subheader("Módulo A/B/C - Interseção & Variáveis Extras")
+    st.caption("Gere os Arquivos A e B. No Passo 3, o sistema combina os miolos variáveis e acrescenta as dezenas extras escolhidas.")
 
-    with st.expander("Passo 1 - Gerar Arquivo A", expanded=True):
+    with st.expander("Passo 1 — Gerar Arquivo A", expanded=True):
         render_intersection_group("A")
-    with st.expander("Passo 2 - Gerar Arquivo B"):
+    with st.expander("Passo 2 — Gerar Arquivo B"):
         render_intersection_group("B")
-    with st.expander("Passo 3 - Gerar Arquivo C", expanded=True):
+    with st.expander("Passo 3 — Gerar Arquivo C", expanded=True):
         games_a = st.session_state.get("intersection_a_games", [])
         games_b = st.session_state.get("intersection_b_games", [])
         fixed_a = st.session_state.get("intersection_a_fixed", [])
         fixed_b = st.session_state.get("intersection_b_fixed", [])
         if not games_a or not games_b:
-            st.info("Gere os Arquivos A e B para habilitar a combinacao do Arquivo C.")
+            st.info("💡 Gere os Arquivos A e B primeiro para habilitar a combinação do Arquivo C.")
             return
 
-        st.markdown("#### Dezenas variaveis extras (opcional)")
+        st.markdown("#### Dezenas Variáveis Extras (Opcional)")
         extra_variables = render_extra_ticket("intersection_extra_variables")
         target_size = st.number_input(
             "Total de dezenas por aposta do Arquivo C",
@@ -877,11 +1024,11 @@ def render_intersection_module():
             key="intersection_target_size",
         )
         st.caption(
-            f"Miolo de A: A sem {len(fixed_a)} fixa(s). Miolo de B: B sem {len(fixed_b)} fixa(s). "
-            f"Extras selecionadas: {len(extra_variables)}. Sem extras, o Arquivo C sera a juncao direta dos miolos."
+            f"Miolo de A: sem {len(fixed_a)} fixa(s). Miolo de B: sem {len(fixed_b)} fixa(s). "
+            f"Extras selecionadas: {len(extra_variables)}."
         )
 
-        if st.button("Gerar Arquivo C", type="primary", key="generate_intersection_c"):
+        if st.button("✨ Gerar Arquivo C", type="primary", key="generate_intersection_c"):
             games_c = generate_file_c(
                 games_a, games_b, fixed_a, fixed_b, extra_variables, int(target_size)
             )
@@ -896,17 +1043,17 @@ def render_intersection_module():
                 if incomplete:
                     missing = max(int(target_size) - size for size in incomplete)
                     st.warning(
-                        f"Arquivo C gerado com a juncao A+B, mas {len(incomplete)} jogo(s) ainda nao atingem "
-                        f"{int(target_size)} dezenas. Faltam ate {missing} dezena(s); selecione extras se quiser completa-los."
+                        f"Arquivo C gerado com a junção A+B, mas {len(incomplete)} jogo(s) ainda não atingem "
+                        f"{int(target_size)} dezenas. Faltam até {missing} dezena(s); selecione extras se quiser completá-los."
                     )
                 else:
-                    st.success(f"Arquivo C gerado com {len(games_c):,} jogo(s) de {int(target_size)} dezenas.".replace(",", "."))
+                    st.success(f"🎉 Arquivo C gerado com {len(games_c):,} jogo(s) de {int(target_size)} dezenas.".replace(",", "."))
 
         games_c = st.session_state.get("intersection_c_games", [])
         if games_c:
             text_column, pdf_column, checker_column = st.columns(3)
             text_column.download_button(
-                "Baixar Arquivo C (.txt)",
+                "📄 Baixar Arquivo C (.txt)",
                 data="\n".join(format_game(game) for game in games_c),
                 file_name="arquivo_c_lotofacil.txt",
                 mime="text/plain",
@@ -914,133 +1061,35 @@ def render_intersection_module():
                 use_container_width=True,
             )
             pdf_column.download_button(
-                "Baixar Arquivo C Loto (.pdf)",
+                "🖨️ Baixar Arquivo C (.pdf)",
                 data=build_games_pdf(games_c),
-                file_name="arquivo_c_lotofacil_conferencia_nao_oficial.pdf",
+                file_name="arquivo_c_lotofacil_conferencia.pdf",
                 mime="application/pdf",
                 key="download_intersection_c_pdf",
                 use_container_width=True,
             )
             checker_column.button(
-                "Conferir Arquivo C",
+                "🔍 Conferir Arquivo C",
                 key="checker_intersection_c",
                 on_click=open_intersection_c_in_checker,
                 use_container_width=True,
                 disabled=any(len(game) not in BET_PRICES for game in games_c),
             )
             if any(len(game) not in BET_PRICES for game in games_c):
-                st.caption("Complete as dezenas extras para habilitar a conferencia do Arquivo C.")
-            st.caption("Previa do Arquivo C:")
+                st.caption("Complete as dezenas extras para habilitar a conferência do Arquivo C.")
+            st.caption("Prévia do Arquivo C:")
             for game in games_c[:10]:
-                st.text(format_game(game))
-
-
-def render_checker_legacy():
-    st.subheader("Conferidor")
-    st.caption("Busca o último resultado da Lotofácil e confere seus jogos.")
-
-    if st.button("Buscar último concurso"):
-        with st.spinner("Consultando API..."):
-            try:
-                st.session_state["latest_result"] = fetch_latest_result()
-            except requests.RequestException as exc:
-                st.error(f"Erro ao buscar resultado: {exc}")
-                return
-
-    result = st.session_state.get("latest_result")
-    if result:
-        drawn = sorted(int(d) for d in result["dezenas"])
-        st.markdown(
-            f"**Concurso {result['concurso']}** — {result['data']}  \n"
-            f"Dezenas sorteadas: **{', '.join(f'{d:02d}' for d in drawn)}**"
-        )
-
-    st.markdown("**Seus jogos**")
-    input_method = st.radio(
-        "Como enviar os jogos?",
-        ["Colar texto", "Enviar arquivo .txt"],
-        horizontal=True,
-    )
-
-    games_text = ""
-    if input_method == "Colar texto":
-        games_text = st.text_area(
-            "Cole os jogos (um por linha)",
-            height=200,
-            placeholder="01,02,03,04,05,06,07,08,09,10,11,12,13,14,15",
-        )
-    else:
-        uploaded = st.file_uploader("Arquivo .txt", type=["txt"])
-        if uploaded:
-            games_text = uploaded.read().decode("utf-8")
-
-    if st.button("Conferir jogos", type="primary"):
-        if not result:
-            st.warning("Busque o último concurso antes de conferir.")
-            return
-
-        drawn_set = set(int(d) for d in result["dezenas"])
-        lines = games_text.strip().splitlines()
-        if not lines:
-            st.warning("Nenhum jogo informado.")
-            return
-
-        results = []
-        invalid_lines = []
-        for idx, line in enumerate(lines, start=1):
-            game = parse_game_line(line)
-            if game is None:
-                continue
-            if len(game) < 1:
-                invalid_lines.append(f"Linha {idx}: jogo vazio.")
-                continue
-            hits = count_hits(game, drawn_set)
-            results.append({"Jogo": format_game(game), "Dezenas": len(game), "Acertos": hits})
-
-        if invalid_lines:
-            for msg in invalid_lines:
-                st.warning(msg)
-
-        if not results:
-            st.warning("Nenhum jogo válido para conferir.")
-            return
-
-        st.markdown(f"**{len(results)}** jogo(s) conferido(s)")
-
-        summary = {11: 0, 12: 0, 13: 0, 14: 0, 15: 0, "outros": 0}
-        for r in results:
-            h = r["Acertos"]
-            if h in summary:
-                summary[h] += 1
-            else:
-                summary["outros"] += 1
-
-        cols = st.columns(5)
-        for i, col in enumerate(cols):
-            pts = 11 + i
-            col.metric(f"{pts} pts", summary[pts])
-
-        if summary["outros"]:
-            st.caption(f"Jogos com menos de 11 acertos: {summary['outros']}")
-
-        winners = [r for r in results if r["Acertos"] >= 11]
-        if winners:
-            st.markdown("**Jogos premiados (11+ acertos)**")
-            st.dataframe(winners, use_container_width=True, hide_index=True)
-        else:
-            st.info("Nenhum jogo com 11 ou mais acertos.")
-
-        st.markdown("**Todos os jogos**")
-        st.dataframe(results, use_container_width=True, hide_index=True)
+                st.code(format_game(game), language="text")
 
 
 def render_checker():
-    st.subheader("Conferidor")
-    st.caption("Escolha no calendário as datas dos sorteios. A premiação considera os valores publicados em cada concurso.")
+    st.markdown(MODERN_CSS, unsafe_allow_html=True)
+    st.subheader("Conferidor Oficial de Concursos")
+    st.caption("Selecione no calendário as datas ou busque pelos últimos concursos. A premiação considera a tabela oficial da CAIXA.")
 
     auto_check = st.session_state.get("auto_check_pending", False)
     if auto_check:
-        with st.spinner("Buscando os 10 últimos concursos e conferindo os jogos gerados..."):
+        with st.spinner("🔄 Buscando os 10 últimos concursos e conferindo os jogos..."):
             try:
                 st.session_state["calendar_results"] = fetch_recent_results(10)
                 st.session_state["checker_selected_contests"] = [
@@ -1053,11 +1102,11 @@ def render_checker():
 
     today = date.today()
     selected_dates = st.date_input(
-        "Calendário de concursos",
+        "📅 Calendário de Concursos",
         value=(today - timedelta(days=7), today),
         max_value=today,
         format="DD/MM/YYYY",
-        help="Selecione uma data ou período; o app localiza os concursos realizados nele.",
+        help="Selecione uma data ou período; o app busca os concursos realizados nele.",
     )
     if isinstance(selected_dates, tuple) and len(selected_dates) == 2:
         start_date, end_date = selected_dates
@@ -1071,8 +1120,8 @@ def render_checker():
         st.warning("Para evitar muitas consultas, selecione até 120 dias.")
         return
 
-    if st.button("Buscar concursos no calendário"):
-        with st.spinner("Consultando resultados..."):
+    if st.button("🔍 Buscar Concursos no Calendário"):
+        with st.spinner("Consultando resultados na API..."):
             try:
                 st.session_state["calendar_results"] = fetch_results_for_dates(start_date, end_date)
             except requests.RequestException as exc:
@@ -1083,7 +1132,7 @@ def render_checker():
     result_by_contest = {int(item["concurso"]): item for item in found_results}
     if result_by_contest:
         selected_contests = st.multiselect(
-            "Concursos a conferir",
+            "Concursos a Conferir",
             options=list(result_by_contest),
             default=list(result_by_contest),
             format_func=lambda contest: f"Concurso {contest} — {result_by_contest[contest]['data']}",
@@ -1092,19 +1141,20 @@ def render_checker():
         for contest in selected_contests:
             result = result_by_contest[contest]
             drawn = sorted(int(d) for d in result["dezenas"])
-            st.caption(f"Concurso {contest} ({result['data']}): {', '.join(f'{d:02d}' for d in drawn)}")
+            st.caption(f"📌 **Concurso {contest} ({result['data']})**: {', '.join(f'{d:02d}' for d in drawn)}")
     else:
         selected_contests = []
 
-    st.markdown("**Seus jogos**")
+    st.markdown("---")
+    st.markdown("**Seus Jogos**")
     input_method = st.radio(
-        "Como enviar os jogos?", ["Colar texto", "Enviar arquivo .txt"],
+        "Como deseja enviar os jogos?", ["Colar texto", "Enviar arquivo .txt"],
         horizontal=True, key="checker_input_method",
     )
     games_text = ""
     if input_method == "Colar texto":
         games_text = st.text_area(
-            "Cole os jogos (um por linha)", height=200,
+            "Cole os jogos (um por linha)", height=180,
             placeholder="01,02,03,04,05,06,07,08,09,10,11,12,13,14,15",
             key="checker_games_text",
         )
@@ -1113,7 +1163,7 @@ def render_checker():
         if uploaded:
             games_text = uploaded.read().decode("utf-8")
 
-    run_check = st.button("Conferir jogos", type="primary")
+    run_check = st.button("🚀 Conferir Jogos", type="primary")
     if auto_check:
         st.session_state["auto_check_pending"] = False
         run_check = True
@@ -1165,56 +1215,75 @@ def render_checker():
                 all_rows.append({
                     "Concurso": contest, "Data": result["data"], "Jogo": game_index,
                     "Dezenas": len(game), "Acertos": hits,
-                    "Prêmios (11–15)": sum(units.values()), "Valor recebido": brl(received),
+                    "Prêmios (11–15)": sum(units.values()), "Valor Recebido": brl(received),
                 })
             total_received += contest_received
-            st.markdown(f"**Concurso {contest} — {result['data']}**")
+            st.markdown(f"#### Concurso {contest} — {result['data']}")
             columns = st.columns(5)
             for index, points in enumerate(range(11, 16)):
-                columns[index].metric(f"{points} pontos", contest_units[points])
-            st.caption(f"Recebido neste concurso: {brl(contest_received)}")
+                columns[index].metric(f"{points} Pontos", contest_units[points])
+            st.caption(f"💰 Recebido neste concurso: **{brl(contest_received)}**")
 
-        st.divider()
-        st.markdown("**Resumo financeiro e de premiações**")
+        st.markdown("---")
+        st.markdown("### 📊 Resumo Financeiro & Desempenho")
         games_col, invested_col, prizes_col, balance_col = st.columns(4)
-        games_col.metric("Jogos lidos", len(games))
-        invested_col.metric("Investimento total", brl(total_investment))
-        prizes_col.metric("Premiação total", brl(total_received))
-        balance_col.metric("Saldo", brl(total_received - total_investment))
+        games_col.metric("Total de Jogos", len(games))
+        invested_col.metric("Investimento Total", brl(total_investment))
+        prizes_col.metric("Premiação Total", brl(total_received))
+        
+        balance_val = total_received - total_investment
+        balance_col.metric("Saldo Final", brl(balance_val), delta=f"{balance_val:+,.2f}".replace(",", "X").replace(".", ",").replace("X", "."))
+
         columns = st.columns(5)
         for index, points in enumerate(range(11, 16)):
-            columns[index].metric(f"Prêmios de {points} pts", overall_units[points])
+            columns[index].metric(f"Total {points} Pts", overall_units[points])
 
         winners = [row for row in all_rows if row["Prêmios (11–15)"]]
         if winners:
-            st.markdown("**Jogos premiados**")
+            st.markdown("#### 🏆 Jogos Premiados")
             st.dataframe(winners, use_container_width=True, hide_index=True)
         else:
             st.info("Nenhum prêmio de 11 a 15 pontos nos concursos selecionados.")
-        st.markdown("**Todos os jogos conferidos**")
+        st.markdown("#### 📋 Todos os Jogos Conferidos")
         st.dataframe(all_rows, use_container_width=True, hide_index=True)
 
 
 def main():
-    st.set_page_config(page_title="Lotofácil — Gerador & Conferidor", page_icon="🎱", layout="wide")
-    if LOGO_PATH.exists():
-        st.image(str(LOGO_PATH), width=360)
-    st.title("Lotofácil")
-    st.markdown("Gerador de combinações e conferidor de jogos.")
+    st.set_page_config(
+        page_title="Lotofácil Pro — Gerador & Conferidor",
+        page_icon="🎱",
+        layout="wide",
+        initial_sidebar_state="collapsed",
+    )
+
+    # Hero Header Sem Imagem de Logo
+    st.markdown(
+        """
+        <div class="hero-container">
+            <div class="hero-badge">🎱 LOTOFÁCIL INTELIGENTE</div>
+            <h1 class="hero-title">Gerador & Conferidor Pro</h1>
+            <p class="hero-subtitle">Geração de combinações estratégicas, interseções de arquivos e conferência de concursos da Lotofácil.</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if "active_section" not in st.session_state:
         st.session_state["active_section"] = "Gerador de Combinações"
+
     active_section = st.radio(
         "Navegação",
-        ["Gerador de Combinações", "Modulo A/B/C", "Conferidor"],
+        ["Gerador de Combinações", "Módulo A/B/C", "Conferidor"],
         horizontal=True,
         key="active_section",
         label_visibility="collapsed",
     )
 
+    st.markdown("<br>", unsafe_allow_html=True)
+
     if active_section == "Gerador de Combinações":
         render_generator()
-    elif active_section == "Modulo A/B/C":
+    elif active_section == "Módulo A/B/C":
         render_intersection_module()
     else:
         render_checker()

@@ -12,6 +12,3 @@ env/
 .DS_Store
 .vscode/
 .idea/
-
-# Temp files
-logo/lotoapp.old.png
