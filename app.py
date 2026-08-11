@@ -22,13 +22,37 @@ MODERN_CSS = """
     @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap');
 
     /* Fontes Globais e Estilo Base */
-    html, body, [class*="st-"], .stApp {
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    html, body, .stApp, p, h1, h2, h3, h4, h5, h6, label, input, textarea, select {
+        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    /* Preservar ícones nativos do Streamlit e do Expander */
+    [data-testid="stIconMaterial"],
+    [class*="MaterialSymbols"],
+    [class*="material-icons"],
+    div[data-testid="stExpander"] summary *,
+    div[data-testid="stExpander"] i {
+        font-family: 'Material Symbols Outlined', 'Material Icons', inherit !important;
     }
 
     /* Ocultar elementos nativos desnecessários */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
+
+    /* Estilização limpa para Expanders */
+    div[data-testid="stExpander"] {
+        border-radius: 14px !important;
+        border: 1px solid #e2e8f0 !important;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03) !important;
+        background: #ffffff !important;
+        margin-bottom: 1rem !important;
+        overflow: hidden !important;
+    }
+    div[data-testid="stExpander"] summary {
+        font-weight: 700 !important;
+        color: #1e1b4b !important;
+        font-size: 1rem !important;
+    }
 
     /* Hero Header Moderno */
     .hero-container {
@@ -150,8 +174,10 @@ MODERN_CSS = """
     .dot-extra { background: #10b981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.5); }
     .dot-empty { background: #e2e8f0; }
 
-    /* Estilização dos Botões de Dezenas (Pílulas) */
-    [class*="st-key-ticket_"] button {
+    /* Estilização dos Botões de Dezenas (Pílulas) - usando st-key do Streamlit */
+    [class*="st-key-btn_ticket_"] button,
+    [class*="st-key-btn_sel_"] button,
+    [class*="st-key-btn_extra_"] button {
         border-radius: 12px !important;
         font-family: 'Plus Jakarta Sans', sans-serif !important;
         font-size: 0.95rem !important;
@@ -159,62 +185,78 @@ MODERN_CSS = """
         height: 2.6rem !important;
         min-height: 2.6rem !important;
         padding: 0 !important;
+        width: 100% !important;
         transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
     }
 
-    /* Estado Desmarcado */
-    [class*="st-key-ticket_empty_"] button,
-    [class*="st-key-ticket_fixed_nums_"] button,
-    [class*="st-key-ticket_group_nums_"] button {
+    /* Estado Desmarcado (3º Clique / Neutro - BRANCO) */
+    [class*="st-key-btn_ticket_"][class*="_empty"] button,
+    [class*="st-key-btn_sel_"][class*="_empty"] button,
+    [class*="st-key-btn_extra_"][class*="_empty"] button {
         background: #ffffff !important;
+        background-color: #ffffff !important;
         border: 1.5px solid #cbd5e1 !important;
         color: #334155 !important;
         box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
     }
-    [class*="st-key-ticket_empty_"] button:hover,
-    [class*="st-key-ticket_fixed_nums_"] button:hover,
-    [class*="st-key-ticket_group_nums_"] button:hover {
+    [class*="st-key-btn_ticket_"][class*="_empty"] button:hover,
+    [class*="st-key-btn_sel_"][class*="_empty"] button:hover,
+    [class*="st-key-btn_extra_"][class*="_empty"] button:hover {
         background: #f1f5f9 !important;
+        background-color: #f1f5f9 !important;
         border-color: #94a3b8 !important;
         color: #0f172a !important;
         transform: translateY(-2px) !important;
         box-shadow: 0 4px 8px rgba(0,0,0,0.06) !important;
     }
 
-    /* Estado Dezena Fixa (Vinho / Magenta Glowing) */
-    [class*="st-key-ticket_fixed_"] button {
+    /* Estado Dezena Fixa (1º CLIQUE - VINHO / MAGENTA) */
+    [class*="st-key-btn_ticket_"][class*="_fixed"] button {
         background: linear-gradient(135deg, #831843 0%, #be185d 100%) !important;
-        border: none !important;
+        background-color: #be185d !important;
+        border: 1.5px solid #831843 !important;
         color: #ffffff !important;
         box-shadow: 0 4px 14px rgba(190, 24, 93, 0.45) !important;
         transform: translateY(-1px) !important;
     }
-    [class*="st-key-ticket_fixed_"] button:hover {
+    [class*="st-key-btn_ticket_"][class*="_fixed"] button:hover {
         background: linear-gradient(135deg, #9d174d 0%, #db2777 100%) !important;
+        background-color: #db2777 !important;
         box-shadow: 0 6px 18px rgba(190, 24, 93, 0.55) !important;
     }
 
-    /* Estado Dezena Variável (Azul Elétrico Glowing) */
-    [class*="st-key-ticket_variable_"] button {
+    /* Estado Dezena Variável (2º CLIQUE - AZUL ELÉTRICO) */
+    [class*="st-key-btn_ticket_"][class*="_variable"] button {
         background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
-        border: none !important;
+        background-color: #2563eb !important;
+        border: 1.5px solid #1e40af !important;
         color: #ffffff !important;
         box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45) !important;
         transform: translateY(-1px) !important;
     }
-    [class*="st-key-ticket_variable_"] button:hover {
+    [class*="st-key-btn_ticket_"][class*="_variable"] button:hover {
         background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%) !important;
+        background-color: #3b82f6 !important;
         box-shadow: 0 6px 18px rgba(37, 99, 235, 0.55) !important;
     }
 
-    /* Estado Dezena Extra (Verde Esmeralda Glowing) */
-    [class*="st-key-ticket_extra_"] button[kind="primary"],
-    [class*="st-key-ticket_intersection_extra_variables_"] button[kind="primary"] {
+    /* Estado Dezena Extra / Selecionada (VERDE ESMERALDA) */
+    [class*="st-key-btn_ticket_"][class*="_extra"] button,
+    [class*="st-key-btn_sel_"][class*="_selected"] button,
+    [class*="st-key-btn_extra_"][class*="_selected"] button {
         background: linear-gradient(135deg, #047857 0%, #10b981 100%) !important;
-        border: none !important;
+        background-color: #10b981 !important;
+        border: 1.5px solid #047857 !important;
         color: #ffffff !important;
         box-shadow: 0 4px 14px rgba(16, 185, 129, 0.45) !important;
         transform: translateY(-1px) !important;
+    }
+    [class*="st-key-btn_ticket_"][class*="_extra"] button:hover,
+    [class*="st-key-btn_sel_"][class*="_selected"] button:hover,
+    [class*="st-key-btn_extra_"][class*="_selected"] button:hover {
+        background: linear-gradient(135deg, #059669 0%, #34d399 100%) !important;
+        background-color: #059669 !important;
+        box-shadow: 0 6px 18px rgba(16, 185, 129, 0.55) !important;
     }
 
     /* Estilização dos Containers & Envoltórios de Borda */
@@ -225,9 +267,10 @@ MODERN_CSS = """
         background: #ffffff !important;
     }
 
-    /* Estilização de Botões de Ação Principais */
-    .stButton button[kind="primary"] {
+    /* Estilização de Botões de Ação Principais (Excluindo Volantes) */
+    div.stButton:not([class*="st-key-ticket_"]) button[kind="primary"] {
         background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 100%) !important;
+        background-color: #6d28d9 !important;
         border: none !important;
         border-radius: 12px !important;
         color: #ffffff !important;
@@ -237,8 +280,9 @@ MODERN_CSS = """
         box-shadow: 0 4px 14px rgba(109, 40, 217, 0.35) !important;
         transition: all 0.2s ease !important;
     }
-    .stButton button[kind="primary"]:hover {
+    div.stButton:not([class*="st-key-ticket_"]) button[kind="primary"]:hover {
         background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%) !important;
+        background-color: #7c3aed !important;
         box-shadow: 0 6px 20px rgba(109, 40, 217, 0.5) !important;
         transform: translateY(-2px) !important;
     }
@@ -411,12 +455,12 @@ def render_number_selector(key: str, label: str) -> list[int]:
             cols = st.columns(5, gap="small")
             for col_idx in range(5):
                 num = col_idx * 5 + row + 1
+                is_selected = num in st.session_state[key]
+                state_suffix = "selected" if is_selected else "empty"
                 with cols[col_idx]:
-                    is_selected = num in st.session_state[key]
                     if st.button(
                         f"{num:02d}",
-                        key=f"ticket_{key}_{num}",
-                        type="primary" if is_selected else "secondary",
+                        key=f"btn_sel_{key}_{num}_{state_suffix}",
                         use_container_width=True,
                     ):
                         toggle_number(key, num)
@@ -490,12 +534,11 @@ def render_unified_ticket(key: str) -> tuple[list[int], list[int], dict[int, int
             for column_index in range(5):
                 number = column_index * 5 + row + 1
                 state = states.get(number, 0)
-                state_name = ("empty", "fixed", "variable")[state]
+                state_suffix = ("empty", "fixed", "variable")[state]
                 with columns[column_index]:
                     if st.button(
                         f"{number:02d}",
-                        key=f"ticket_{state_name}_{key}_{number}",
-                        type="primary" if state else "secondary",
+                        key=f"btn_ticket_{key}_{number}_{state_suffix}",
                         use_container_width=True,
                     ):
                         cycle_ticket_number(key, number)
@@ -554,12 +597,12 @@ def render_extra_ticket(key: str) -> list[int]:
             columns = st.columns(5, gap="small")
             for column_index in range(5):
                 number = column_index * 5 + row + 1
+                selected = number in st.session_state[key]
+                state_suffix = "selected" if selected else "empty"
                 with columns[column_index]:
-                    selected = number in st.session_state[key]
                     if st.button(
                         f"{number:02d}",
-                        key=f"ticket_extra_{key}_{number}",
-                        type="primary" if selected else "secondary",
+                        key=f"btn_extra_{key}_{number}_{state_suffix}",
                         use_container_width=True,
                     ):
                         toggle_number(key, number)
