@@ -688,6 +688,21 @@ def open_intersection_c_in_checker() -> None:
     st.session_state["auto_check_pending"] = True
 
 
+def make_open_intersection_ab_in_checker(letter: str):
+    """Fábrica de callbacks para abrir Arquivo A ou B no conferidor."""
+    def _callback() -> None:
+        key = f"intersection_{letter.lower()}_games"
+        games = st.session_state.get(key, [])
+        if not games:
+            st.session_state["checker_navigation_error"] = True
+            return
+        st.session_state["checker_games_text"] = "\n".join(format_game(game) for game in games)
+        st.session_state["checker_input_method"] = "Colar texto"
+        st.session_state["active_section"] = "Conferidor"
+        st.session_state["auto_check_pending"] = True
+    return _callback
+
+
 def generate_combinations(
     fixed: list[int], groups: list[tuple[list[int], int]], fixed_first: bool = True
 ) -> list[list[int]]:
@@ -1029,13 +1044,24 @@ def render_intersection_group(letter: str) -> None:
 
     games = st.session_state.get(f"{state_prefix}_games", [])
     if games:
-        st.download_button(
+        download_col, checker_col = st.columns(2)
+        download_col.download_button(
             f"📄 Baixar Arquivo {letter} (.txt)",
             data="\n".join(format_game(game) for game in games),
             file_name=f"arquivo_{letter.lower()}_lotofacil.txt",
             mime="text/plain",
             key=f"download_{state_prefix}",
+            use_container_width=True,
         )
+        checker_col.button(
+            f"🔍 Conferir Jogos do Arquivo {letter}",
+            key=f"checker_{state_prefix}",
+            on_click=make_open_intersection_ab_in_checker(letter),
+            use_container_width=True,
+            help="Abre o conferidor com os jogos do Arquivo {}, busca os últimos resultados automaticamente.".format(letter),
+        )
+        if st.session_state.pop("checker_navigation_error", False):
+            st.warning(f"Gere o Arquivo {letter} antes de enviá-lo ao conferidor.")
 
 
 def render_intersection_module():
