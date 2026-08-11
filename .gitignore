@@ -1,0 +1,17 @@
+# Python & Byte-compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# OS / Editor files
+.DS_Store
+.vscode/
+.idea/
+
+# Temp files
+logo/lotoapp.old.png
