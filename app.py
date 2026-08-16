@@ -433,6 +433,34 @@ def unique_in_selection_order(numbers: list[int]) -> list[int]:
     return list(dict.fromkeys(numbers))
 
 
+def has_consecutive_sequence(game: list[int], max_sequence: int) -> bool:
+    if max_sequence <= 1:
+        return True
+    game_sorted = sorted(game)
+    consecutive = 1
+    for i in range(1, len(game_sorted)):
+        if game_sorted[i] == game_sorted[i - 1] + 1:
+            consecutive += 1
+            if consecutive >= max_sequence:
+                return True
+        else:
+            consecutive = 1
+    return False
+
+
+def filter_games_by_sequence(games: list[list[int]], max_sequence: int, fixed: list[int] = None) -> list[list[int]]:
+    if max_sequence == 0:
+        return games
+    
+    fixed_set = set(fixed) if fixed else set()
+    filtered_games = []
+    for game in games:
+        variables_only = [num for num in game if num not in fixed_set]
+        if not has_consecutive_sequence(variables_only, max_sequence):
+            filtered_games.append(game)
+    return filtered_games
+
+
 def render_number_selector(key: str, label: str) -> list[int]:
     init_selection(key)
     st.markdown(f"**{label}**")
@@ -956,6 +984,21 @@ def render_generator():
     if configured_count and not 15 <= configured_count <= 20:
         st.warning("Uma aposta Lotofácil válida deve ter entre 15 e 20 dezenas por cartela.")
 
+    st.markdown("---")
+    st.markdown("#### Filtros Avançados")
+    enable_sequence_filter = st.checkbox("Filtrar por sequência de números", key="main_enable_seq")
+    sequence_limit = 0
+    if enable_sequence_filter:
+        sequence_limit = st.number_input(
+            "Eliminar jogos que tenham uma sequência de pelo menos (dezenas):",
+            min_value=2,
+            max_value=15,
+            value=3,
+            step=1,
+            key="main_seq_limit",
+            help="Se 3 for escolhido, jogos contendo 1,2,3 ou 5,6,7 serão eliminados."
+        )
+
     st.markdown("<br>", unsafe_allow_html=True)
     generate_column, checker_column = st.columns(2)
     generate_clicked = generate_column.button("⚡ Gerar Combinações", type="primary", use_container_width=True)
@@ -975,11 +1018,13 @@ def render_generator():
             variable_pick = 0
         try:
             games = generate_ticket_combinations(fixed, variables, int(variable_pick), order)
+            if enable_sequence_filter and sequence_limit > 0:
+                games = filter_games_by_sequence(games, sequence_limit, fixed=fixed)
         except ValueError as exc:
             st.error(str(exc))
             return
         if not games:
-            st.warning("Nenhuma combinação gerada.")
+            st.warning("Nenhuma combinação gerada, ou todas foram filtradas.")
             return
         st.session_state["generated_games"] = games
         st.session_state["generated_games_txt"] = "\n".join(format_game(game) for game in games)
@@ -1033,14 +1078,32 @@ def render_intersection_group(letter: str) -> None:
     if total and total not in BET_PRICES:
         st.warning("Cada jogo de A ou B deve ter de 15 a 20 dezenas.")
 
+    st.markdown("##### Filtro")
+    enable_sequence_filter = st.checkbox(f"Filtrar por sequência de números (Arquivo {letter})", key=f"{state_prefix}_enable_seq")
+    sequence_limit = 0
+    if enable_sequence_filter:
+        sequence_limit = st.number_input(
+            "Tamanho máximo de dezenas consecutivas:",
+            min_value=2,
+            max_value=15,
+            value=3,
+            step=1,
+            key=f"{state_prefix}_seq_limit",
+        )
+
     if st.button(f"🚀 Gerar Arquivo {letter}", key=f"generate_{state_prefix}", type="primary"):
         if total not in BET_PRICES:
             st.error("Configure de 15 a 20 dezenas por jogo antes de gerar.")
         else:
             games = generate_ticket_combinations(fixed, variables, int(pick), order)
+            if enable_sequence_filter and sequence_limit > 0:
+                games = filter_games_by_sequence(games, sequence_limit, fixed=fixed)
             st.session_state[f"{state_prefix}_games"] = games
             st.session_state[f"{state_prefix}_fixed"] = fixed
-            st.success(f"Arquivo {letter} gerado com {len(games):,} jogo(s).".replace(",", "."))
+            if not games:
+                st.warning(f"O Arquivo {letter} não gerou jogos (ou todos foram filtrados).")
+            else:
+                st.success(f"Arquivo {letter} gerado com {len(games):,} jogo(s).".replace(",", "."))
 
     games = st.session_state.get(f"{state_prefix}_games", [])
     if games:
@@ -1097,13 +1160,30 @@ def render_intersection_module():
             f"Extras selecionadas: {len(extra_variables)}."
         )
 
-        if st.button("✨ Gerar Arquivo C", type="primary", key="generate_intersection_c"):
+        st.markdown("#### Filtro")
+        enable_sequence_filter = st.checkbox("Filtrar por sequência de números (Arquivo C)", key="intersection_c_enable_seq")
+        sequence_limit = 0
+        if enable_sequence_filter:
+            sequence_limit = st.number_input(
+                "Tamanho máximo de dezenas consecutivas:",
+                min_value=2,
+                max_value=15,
+                value=3,
+                step=1,
+                key="intersection_c_seq_limit",
+            )
+
+        gen_col_c, check_col_c = st.columns(2)
+        if gen_col_c.button("✨ Gerar Arquivo C", type="primary", key="generate_intersection_c", use_container_width=True):
             games_c = generate_file_c(
                 games_a, games_b, fixed_a, fixed_b, extra_variables, int(target_size)
             )
+            if enable_sequence_filter and sequence_limit > 0:
+                games_c = filter_games_by_sequence(games_c, sequence_limit)
+
             if not games_c:
                 st.error(
-                    "Os miolos de A e B excedem o total configurado; escolha um total maior ou reveja A e B."
+                    "Nenhum jogo gerado. Os miolos de A e B excedem o total, ou os filtros removeram tudo."
                 )
             else:
                 st.session_state["intersection_c_games"] = games_c
@@ -1117,6 +1197,15 @@ def render_intersection_module():
                     )
                 else:
                     st.success(f"🎉 Arquivo C gerado com {len(games_c):,} jogo(s) de {int(target_size)} dezenas.".replace(",", "."))
+        check_col_c.button(
+            "🔍 Conferir Jogos do Arquivo C",
+            key="checker_intersection_c_quick",
+            on_click=open_intersection_c_in_checker,
+            use_container_width=True,
+            help="Abre o conferidor com os jogos do Arquivo C e busca os últimos resultados automaticamente.",
+        )
+        if st.session_state.pop("checker_navigation_error", False):
+            st.warning("Gere o Arquivo C antes de enviá-lo ao conferidor.")
 
         games_c = st.session_state.get("intersection_c_games", [])
         if games_c:
