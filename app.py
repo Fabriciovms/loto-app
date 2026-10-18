@@ -1,11 +1,17 @@
 import itertools
 import math
 import re
+from io import BytesIO
 from datetime import date, datetime, timedelta
 from itertools import combinations
+from pathlib import Path
 
 import requests
 import streamlit as st
+from PIL import Image, ImageOps
+from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.utils import ImageReader
+from reportlab.pdfgen import canvas
 
 LOTOFACIL_MIN = 1
 LOTOFACIL_MAX = 25
@@ -867,94 +873,91 @@ def brl(value: float) -> str:
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-PDF_PAGE_WIDTH = 595
-PDF_PAGE_HEIGHT = 842
+VOLANTE_SOURCE_PATH = Path(__file__).parent / "assets" / "volante-lotofacil-referencia.jpg"
+VOLANTE_IMAGE_SIZE = (800, 1600)
+VOLANTE_PRINT_WIDTH = 226.77  # 80 mm em pontos PDF
+VOLANTE_PRINT_HEIGHT = 453.54  # 160 mm em pontos PDF
+
+# Coordenadas no volante retificado (imagem de referência 800 x 1600). Cada
+# quadro possui as dezenas em cinco colunas: 21-25, 16-20, 11-15, 06-10 e 01-05.
+VOLANTE_COLUMN_X = (109, 230, 350, 471, 592)
+VOLANTE_ROW_Y = (
+    (408, 446, 484, 522, 560),
+    (625, 663, 701, 739, 777),
+    (843, 881, 919, 957, 995),
+)
+VOLANTE_MARK_WIDTH = 46
+VOLANTE_MARK_HEIGHT = 33
 
 
-def pdf_escape(text: str) -> str:
-    return text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+@st.cache_data(show_spinner=False)
+def load_volante_template() -> bytes:
+    """Retifica a foto nítida do volante para o tamanho usado no PDF."""
+    image = ImageOps.exif_transpose(Image.open(VOLANTE_SOURCE_PATH)).convert("RGB")
+    template = image.transform(
+        VOLANTE_IMAGE_SIZE,
+        Image.Transform.QUAD,
+        # superior-esquerdo, inferior-esquerdo, inferior-direito, superior-direito
+        (8, 0, 12, 2760, 1238, 2755, 1245, 0),
+        Image.Resampling.BICUBIC,
+    )
+    buffer = BytesIO()
+    template.save(buffer, format="JPEG", quality=95)
+    return buffer.getvalue()
 
 
-def pdf_text(x: float, y_top: float, text: str, size: float = 10, color: str = "0 0 0") -> str:
-    y = PDF_PAGE_HEIGHT - y_top
-    return f"BT /F1 {size} Tf {color} rg 1 0 0 1 {x:.2f} {y:.2f} Tm ({pdf_escape(text)}) Tj ET"
-
-
-def pdf_rect(x: float, y_top: float, width: float, height: float, color: str, fill: bool = True) -> str:
-    y = PDF_PAGE_HEIGHT - y_top - height
-    operator = "f" if fill else "S"
-    return f"{color} {'rg' if fill else 'RG'} {x:.2f} {y:.2f} {width:.2f} {height:.2f} re {operator}"
-
-
-def draw_pdf_game_card(game: list[int], game_number: int, top: float) -> str:
-    x, width, height = 38, 519, 228
-    commands = [
-        pdf_rect(x, top, width, height, "0.98 0.98 0.99"),
-        pdf_rect(x, top, width, height, "0.40 0.10 0.30", fill=False),
-        pdf_rect(x, top, width, 30, "0.40 0.10 0.30"),
-        pdf_text(x + 16, top + 20, "LOTOFACIL - FOLHA DE CONFERENCIA", 13, "1 1 1"),
-        pdf_text(x + 360, top + 19, f"JOGO {game_number:03d}", 10, "1 1 1"),
-        pdf_text(x + 18, top + 51, "NAO OFICIAL - NAO VALIDA PARA REGISTRO", 8, "0.40 0.10 0.30"),
-        pdf_text(x + 18, top + 68, "Dezenas marcadas", 9, "0.20 0.10 0.20"),
-    ]
-    selected = set(game)
-    cell_width, cell_height = 45, 25
-    gap_x, gap_y = 7, 5
-    grid_width = cell_width * 5 + gap_x * 4
-    grid_x = x + (width - grid_width) / 2
-    grid_y = top + 53
-    for row in range(5):
-        for column in range(5):
-            number = column * 5 + row + 1
-            cell_x = grid_x + column * (cell_width + gap_x)
-            cell_y = grid_y + row * (cell_height + gap_y)
-            marked = number in selected
-            commands.append(pdf_rect(cell_x, cell_y, cell_width, cell_height, "0.40 0.10 0.30" if marked else "1 1 1"))
-            commands.append(pdf_rect(cell_x, cell_y, cell_width, cell_height, "0.60 0.20 0.45", fill=False))
-            label_color = "1 1 1" if marked else "0.40 0.10 0.30"
-            commands.append(pdf_text(cell_x + 14, cell_y + 17, f"{number:02d}", 10, label_color))
-    commands.extend([
-        pdf_text(x + 18, top + 212, "Jogo:", 8, "0.20 0.10 0.20"),
-        pdf_text(x + 55, top + 212, " ".join(f"{number:02d}" for number in game), 8, "0.20 0.10 0.20"),
-        pdf_text(x + 18, top + 224, "Use esta folha apenas para organizacao e conferencia pessoal.", 7, "0.35 0.35 0.35"),
-    ])
-    return "\n".join(commands)
+def volante_mark_position(board_index: int, number: int) -> tuple[float, float, float, float]:
+    """Retorna a área interna a ser preenchida para uma dezena do volante."""
+    row = (number - 1) % 5
+    column = 4 - ((number - 1) // 5)
+    x = VOLANTE_COLUMN_X[column] + 3
+    y = VOLANTE_ROW_Y[board_index][row] + 3
+    return x, y, VOLANTE_MARK_WIDTH - 6, VOLANTE_MARK_HEIGHT - 6
 
 
 def build_games_pdf(games: list[list[int]]) -> bytes:
-    """Cria um PDF A4 autocontido, sem dependências externas."""
-    page_streams = []
-    for first_game in range(0, len(games), 3):
-        commands = [pdf_text(38, 25, "Jogos Lotofacil - conferencia pessoal", 12, "0.25 0.12 0.20")]
-        for offset, game in enumerate(games[first_game:first_game + 3]):
-            commands.append(draw_pdf_game_card(game, first_game + offset + 1, 48 + offset * 245))
-        page_streams.append("\n".join(commands).encode("cp1252", "replace"))
+    """Cria A4 horizontal com três volantes físicos e até nove jogos por folha."""
+    output = BytesIO()
+    page_width, page_height = landscape(A4)
+    pdf = canvas.Canvas(output, pagesize=(page_width, page_height))
+    card_gap = 16
+    total_cards_width = 3 * VOLANTE_PRINT_WIDTH + 2 * card_gap
+    left = (page_width - total_cards_width) / 2
+    bottom = (page_height - VOLANTE_PRINT_HEIGHT) / 2
+    scale_x = VOLANTE_PRINT_WIDTH / VOLANTE_IMAGE_SIZE[0]
+    scale_y = VOLANTE_PRINT_HEIGHT / VOLANTE_IMAGE_SIZE[1]
+    template = ImageReader(BytesIO(load_volante_template()))
 
-    objects = [b"<< /Type /Catalog /Pages 2 0 R >>", None, b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
-    page_object_numbers = []
-    for stream in page_streams:
-        content_number = len(objects) + 1
-        page_number = content_number + 1
-        objects.append(b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream")
-        objects.append(
-            f"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {PDF_PAGE_WIDTH} {PDF_PAGE_HEIGHT}] "
-            f"/Resources << /Font << /F1 3 0 R >> >> /Contents {content_number} 0 R >>".encode()
-        )
-        page_object_numbers.append(page_number)
-    objects[1] = ("<< /Type /Pages /Kids [" + " ".join(f"{number} 0 R" for number in page_object_numbers) + f"] /Count {len(page_object_numbers)} >>").encode()
+    for first_game in range(0, len(games), 9):
+        for card_index in range(3):
+            card_games = games[first_game + card_index * 3:first_game + (card_index + 1) * 3]
+            if not card_games:
+                break
 
-    output = bytearray(b"%PDF-1.4\n%" + bytes([0xE2, 0xE3, 0xCF, 0xD3]) + b"\n")
-    offsets = [0]
-    for index, obj in enumerate(objects, start=1):
-        offsets.append(len(output))
-        output.extend(f"{index} 0 obj\n".encode())
-        output.extend(obj)
-        output.extend(b"\nendobj\n")
-    xref_offset = len(output)
-    output.extend(f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n".encode())
-    output.extend(b"".join(f"{offset:010d} 00000 n \n".encode() for offset in offsets[1:]))
-    output.extend(f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF".encode())
-    return bytes(output)
+            card_left = left + card_index * (VOLANTE_PRINT_WIDTH + card_gap)
+            pdf.drawImage(
+                template,
+                card_left,
+                bottom,
+                width=VOLANTE_PRINT_WIDTH,
+                height=VOLANTE_PRINT_HEIGHT,
+            )
+            for board_index, game in enumerate(card_games):
+                pdf.setFillColorRGB(0, 0, 0)
+                for number in set(game):
+                    mark_x, mark_y, mark_width, mark_height = volante_mark_position(board_index, number)
+                    pdf.rect(
+                        card_left + mark_x * scale_x,
+                        bottom + VOLANTE_PRINT_HEIGHT - (mark_y + mark_height) * scale_y,
+                        mark_width * scale_x,
+                        mark_height * scale_y,
+                        fill=1,
+                        stroke=0,
+                    )
+        pdf.showPage()
+
+    pdf.save()
+    return output.getvalue()
 
 
 def render_generator():
