@@ -12,3 +12,7 @@ env/
 .DS_Store
 .vscode/
 .idea/
+
+# Local Python environment
+.venv/
+.streamlit/

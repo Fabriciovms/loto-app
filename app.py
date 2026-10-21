@@ -8,8 +8,8 @@ from pathlib import Path
 
 import requests
 import streamlit as st
-from PIL import Image, ImageOps
-from reportlab.lib.pagesizes import A4, landscape
+from PIL import Image
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
@@ -873,34 +873,35 @@ def brl(value: float) -> str:
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-VOLANTE_SOURCE_PATH = Path(__file__).parent / "assets" / "volante-lotofacil-referencia.jpg"
-VOLANTE_IMAGE_SIZE = (800, 1600)
-VOLANTE_PRINT_WIDTH = 226.77  # 80 mm em pontos PDF
-VOLANTE_PRINT_HEIGHT = 453.54  # 160 mm em pontos PDF
+# Recorte do scanner do volante Lotofácil em assets/volante-lotofacil-scanner.jpg.
+VOLANTE_SOURCE_PATH = Path(__file__).parent / "assets" / "volante-lotofacil-scanner.jpg"
+VOLANTE_IMAGE_SIZE = (651, 1496)
+VOLANTE_PRINT_WIDTH = 8.2 * 72 / 2.54  # 8,2 cm
+VOLANTE_PRINT_HEIGHT = 14 * 72 / 2.54  # 14 cm
+VOLANTES_PER_PAGE = 4
 
-# Coordenadas no volante retificado (imagem de referência 800 x 1600). Cada
-# quadro possui as dezenas em cinco colunas: 21-25, 16-20, 11-15, 06-10 e 01-05.
-VOLANTE_COLUMN_X = (109, 230, 350, 471, 592)
+# Cada volante escaneado tem três jogos e cinco colunas: 21-25, 16-20,
+# 11-15, 06-10 e 01-05. As coordenadas são centros das casas no recorte.
+VOLANTE_COLUMN_X = (106, 205, 304, 404, 503)
 VOLANTE_ROW_Y = (
-    (408, 446, 484, 522, 560),
-    (625, 663, 701, 739, 777),
-    (843, 881, 919, 957, 995),
+    (363, 399, 434, 469, 505),
+    (563, 599, 634, 669, 705),
+    (762, 797, 832, 867, 903),
 )
-VOLANTE_MARK_WIDTH = 46
-VOLANTE_MARK_HEIGHT = 33
+VOLANTE_MARK_WIDTH = 20
+VOLANTE_MARK_HEIGHT = 23
+VOLANTE_SIZE_OPTION_X = (100, 150, 201, 252, 303, 355)
+VOLANTE_SIZE_OPTION_Y = 963
+VOLANTE_SIZE_MARK_WIDTH = 18
+VOLANTE_SIZE_MARK_HEIGHT = 12
 
 
 @st.cache_data(show_spinner=False)
 def load_volante_template() -> bytes:
-    """Retifica a foto nítida do volante para o tamanho usado no PDF."""
-    image = ImageOps.exif_transpose(Image.open(VOLANTE_SOURCE_PATH)).convert("RGB")
-    template = image.transform(
-        VOLANTE_IMAGE_SIZE,
-        Image.Transform.QUAD,
-        # superior-esquerdo, inferior-esquerdo, inferior-direito, superior-direito
-        (8, 0, 12, 2760, 1238, 2755, 1245, 0),
-        Image.Resampling.BICUBIC,
-    )
+    """Carrega o recorte em pé do volante obtido do scanner A4."""
+    template = Image.open(VOLANTE_SOURCE_PATH).convert("RGB")
+    if template.size != VOLANTE_IMAGE_SIZE:
+        template = template.resize(VOLANTE_IMAGE_SIZE, Image.Resampling.LANCZOS)
     buffer = BytesIO()
     template.save(buffer, format="JPEG", quality=95)
     return buffer.getvalue()
@@ -910,35 +911,66 @@ def volante_mark_position(board_index: int, number: int) -> tuple[float, float, 
     """Retorna a área interna a ser preenchida para uma dezena do volante."""
     row = (number - 1) % 5
     column = 4 - ((number - 1) // 5)
-    x = VOLANTE_COLUMN_X[column] + 3
-    y = VOLANTE_ROW_Y[board_index][row] + 3
-    return x, y, VOLANTE_MARK_WIDTH - 6, VOLANTE_MARK_HEIGHT - 6
+    x = VOLANTE_COLUMN_X[column] - VOLANTE_MARK_WIDTH / 2
+    y = VOLANTE_ROW_Y[board_index][row] - VOLANTE_MARK_HEIGHT / 2
+    return x, y, VOLANTE_MARK_WIDTH, VOLANTE_MARK_HEIGHT
+
+
+def group_print_cards(games: list[list[int]]) -> list[tuple[int, list[list[int]]]]:
+    """Agrupa jogos por tamanho para manter correta a seleção compartilhada."""
+    games_by_size: dict[int, list[list[int]]] = {}
+    for game in games:
+        games_by_size.setdefault(len(game), []).append(game)
+    return [
+        (size, games_by_size[size][start:start + 3])
+        for size in sorted(games_by_size)
+        for start in range(0, len(games_by_size[size]), 3)
+    ]
+
+
+def print_page_count(games: list[list[int]]) -> int:
+    """Calcula folhas A4 agrupando três apostas iguais por volante."""
+    cards = group_print_cards(games)
+    return math.ceil(len(cards) / VOLANTES_PER_PAGE) if cards else 0
+
+
+def volante_size_mark_position(game_size: int) -> tuple[float, float, float, float]:
+    """Retorna a área a preencher para a quantidade de dezenas selecionada."""
+    x = VOLANTE_SIZE_OPTION_X[game_size - 15]
+    y = VOLANTE_SIZE_OPTION_Y
+    return (
+        x - VOLANTE_SIZE_MARK_WIDTH / 2,
+        y - VOLANTE_SIZE_MARK_HEIGHT / 2,
+        VOLANTE_SIZE_MARK_WIDTH,
+        VOLANTE_SIZE_MARK_HEIGHT,
+    )
 
 
 def build_games_pdf(games: list[list[int]]) -> bytes:
-    """Cria A4 horizontal com três volantes físicos e até nove jogos por folha."""
+    """Cria A4 retrato com grade fixa de quatro volantes em escala real."""
     output = BytesIO()
-    page_width, page_height = landscape(A4)
+    page_width, page_height = A4
     pdf = canvas.Canvas(output, pagesize=(page_width, page_height))
-    card_gap = 16
-    total_cards_width = 3 * VOLANTE_PRINT_WIDTH + 2 * card_gap
-    left = (page_width - total_cards_width) / 2
-    bottom = (page_height - VOLANTE_PRINT_HEIGHT) / 2
+    grid_width = 2 * VOLANTE_PRINT_WIDTH
+    grid_height = 2 * VOLANTE_PRINT_HEIGHT
+    left = (page_width - grid_width) / 2
+    bottom = (page_height - grid_height) / 2
     scale_x = VOLANTE_PRINT_WIDTH / VOLANTE_IMAGE_SIZE[0]
     scale_y = VOLANTE_PRINT_HEIGHT / VOLANTE_IMAGE_SIZE[1]
     template = ImageReader(BytesIO(load_volante_template()))
 
-    for first_game in range(0, len(games), 9):
-        for card_index in range(3):
-            card_games = games[first_game + card_index * 3:first_game + (card_index + 1) * 3]
-            if not card_games:
-                break
-
-            card_left = left + card_index * (VOLANTE_PRINT_WIDTH + card_gap)
+    cards = group_print_cards(games)
+    for first_card in range(0, len(cards), VOLANTES_PER_PAGE):
+        page_cards = cards[first_card:first_card + VOLANTES_PER_PAGE]
+        for card_index, (game_size, card_games) in enumerate(page_cards):
+            column = card_index % 2
+            row_from_top = card_index // 2
+            card_left = left + column * VOLANTE_PRINT_WIDTH
+            card_bottom = bottom + (1 - row_from_top) * VOLANTE_PRINT_HEIGHT
             pdf.drawImage(
                 template,
                 card_left,
-                bottom,
+                card_bottom,
                 width=VOLANTE_PRINT_WIDTH,
                 height=VOLANTE_PRINT_HEIGHT,
             )
@@ -948,17 +980,39 @@ def build_games_pdf(games: list[list[int]]) -> bytes:
                     mark_x, mark_y, mark_width, mark_height = volante_mark_position(board_index, number)
                     pdf.rect(
                         card_left + mark_x * scale_x,
-                        bottom + VOLANTE_PRINT_HEIGHT - (mark_y + mark_height) * scale_y,
+                        card_bottom + VOLANTE_PRINT_HEIGHT - (mark_y + mark_height) * scale_y,
                         mark_width * scale_x,
                         mark_height * scale_y,
                         fill=1,
                         stroke=0,
                     )
+            if game_size in BET_PRICES:
+                size_x, size_y, size_width, size_height = volante_size_mark_position(game_size)
+                pdf.rect(
+                    card_left + size_x * scale_x,
+                    card_bottom + VOLANTE_PRINT_HEIGHT - (size_y + size_height) * scale_y,
+                    size_width * scale_x,
+                    size_height * scale_y,
+                    fill=1,
+                    stroke=0,
+                )
+
+        # Contorno compartilhado das quatro cartelas e linhas fixas para corte em pilha.
+        pdf.saveState()
+        pdf.setStrokeColorRGB(0.68, 0.68, 0.68)
+        pdf.setLineWidth(0.45)
+        pdf.setDash()
+        for column in range(3):
+            x = left + column * VOLANTE_PRINT_WIDTH
+            pdf.line(x, bottom, x, bottom + grid_height)
+        for row in range(3):
+            y = bottom + row * VOLANTE_PRINT_HEIGHT
+            pdf.line(left, y, left + grid_width, y)
+        pdf.restoreState()
         pdf.showPage()
 
     pdf.save()
     return output.getvalue()
-
 
 def render_generator():
     st.markdown(MODERN_CSS, unsafe_allow_html=True)
@@ -1043,21 +1097,12 @@ def render_generator():
         for game in games[:preview_count]:
             st.code(format_game(game), language="text")
             
-        text_column, pdf_column = st.columns(2)
-        text_column.download_button(
-            label="📄 Baixar todos os jogos (.txt)",
+        st.download_button(
+            label="Baixar todos os jogos (.txt)",
             data=st.session_state["generated_games_txt"],
             file_name="jogos_lotofacil.txt",
             mime="text/plain",
             use_container_width=True,
-        )
-        pdf_column.download_button(
-            label="🖨️ Baixar Folha Loto (.pdf)",
-            data=build_games_pdf(games),
-            file_name="jogos_lotofacil_conferencia.pdf",
-            mime="application/pdf",
-            use_container_width=True,
-            help="PDF para organização e conferência pessoal.",
         )
 
 
@@ -1409,6 +1454,74 @@ def render_checker():
         st.dataframe(all_rows, use_container_width=True, hide_index=True)
 
 
+
+def parse_print_games(text: str) -> tuple[list[list[int]], list[str]]:
+    """L\u00ea uma aposta v\u00e1lida da Lotof\u00e1cil por linha n\u00e3o vazia."""
+    games = []
+    errors = []
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        numbers = parse_numbers(line)
+        if not numbers:
+            errors.append(f"Linha {line_number}: n\u00e3o encontrei dezenas.")
+            continue
+        out_of_range = sorted({number for number in numbers if number not in ALL_NUMBERS})
+        if out_of_range:
+            listed = ", ".join(f"{number:02d}" for number in out_of_range)
+            errors.append(f"Linha {line_number}: dezenas fora do intervalo 01 a 25 ({listed}).")
+            continue
+        if len(numbers) != len(set(numbers)):
+            errors.append(f"Linha {line_number}: remova as dezenas repetidas.")
+            continue
+        if len(numbers) not in BET_PRICES:
+            errors.append(f"Linha {line_number}: informe de 15 a 20 dezenas diferentes.")
+            continue
+        games.append(sorted(numbers))
+    return games, errors
+
+
+def render_print_module() -> None:
+    st.markdown(MODERN_CSS, unsafe_allow_html=True)
+    st.subheader("Imprimir Folha Loto")
+    st.caption(
+        "Cole uma aposta por linha. Separe as dezenas por espa\u00e7os, v\u00edrgulas ou outros sinais; "
+        "cada linha deve conter de 15 a 20 dezenas diferentes, entre 01 e 25."
+    )
+    games_text = st.text_area(
+        "Jogos para imprimir",
+        height=220,
+        placeholder=(
+            "01,02,03,04,05,06,07,08,09,10,11,12,13,14,15\n"
+            "01 03 05 07 09 11 13 15 17 19 21 22 23 24 25"
+        ),
+        key="print_games_text",
+    )
+    games, errors = parse_print_games(games_text)
+    if games:
+        count_column, page_column = st.columns(2)
+        count_column.metric("Jogos v\u00e1lidos", len(games))
+        page_column.metric("Folhas A4", print_page_count(games))
+        st.caption("Jogos com a mesma quantidade de dezenas ficam juntos no mesmo volante.")
+        st.caption("Cada folha A4 em retrato comporta 4 volantes, com até 12 jogos.")
+        st.caption("As linhas cinza contornam cartelas de 8,2 x 14 cm e ficam alinhadas em todas as folhas para corte em pilha.")
+        st.caption("Imprima em tamanho real (100%), sem ajustar à página.")
+        st.write("Dezenas por linha: " + ", ".join(str(len(game)) for game in games))
+    for error in errors:
+        st.error(error)
+    if not games and not errors:
+        st.info("Cole os jogos acima para preparar o PDF.")
+    st.download_button(
+        "Gerar PDF da Folha Loto",
+        data=build_games_pdf(games) if games and not errors else b"",
+        file_name="folha_loto.pdf",
+        mime="application/pdf",
+        disabled=not games or bool(errors),
+        use_container_width=True,
+        help="Usa o recorte escaneado ajustado às dimensões físicas de 8,2 x 14 cm.",
+    )
+
+
 def main():
     st.set_page_config(
         page_title="Lotofácil Pro — Gerador & Conferidor",
@@ -1434,7 +1547,7 @@ def main():
 
     active_section = st.radio(
         "Navegação",
-        ["Gerador de Combinações", "Módulo A/B/C", "Conferidor"],
+        ["Gerador de Combina\u00e7\u00f5es", "M\u00f3dulo A/B/C", "Imprimir Folha Loto", "Conferidor"],
         horizontal=True,
         key="active_section",
         label_visibility="collapsed",
@@ -1446,6 +1559,8 @@ def main():
         render_generator()
     elif active_section == "Módulo A/B/C":
         render_intersection_module()
+    elif active_section == "Imprimir Folha Loto":
+        render_print_module()
     else:
         render_checker()
 
