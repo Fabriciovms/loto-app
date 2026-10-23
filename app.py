@@ -1,5 +1,7 @@
 # itertools importa utilitarios para combinar grupos e percorrer produtos cartesianos.
 import itertools
+# base64 codifica a previa PDF para exibi-la em um quadro incorporado.
+import base64
 # math importa operacoes matematicas como combinacoes e teto de paginas.
 import math
 # re importa expressoes regulares para localizar dezenas em textos.
@@ -1859,13 +1861,17 @@ def build_games_pdf(games: list[list[int]]) -> bytes:
 
 
 # Gera uma pagina PDF no tamanho fisico da cartela contendo somente as marcacoes.
-def build_direct_print_pdf(games: list[list[int]]) -> bytes:
+def build_direct_print_pdf(games: list[list[int]], offset_x_mm: float = 0.0, offset_y_mm: float = 0.0) -> bytes:
     # Cria um buffer em memoria para guardar o documento PDF.
     output = BytesIO()
     # Converte a largura fisica da cartela de pontos de referencia da imagem para pontos PDF.
     scale_x = VOLANTE_PRINT_WIDTH / VOLANTE_IMAGE_SIZE[0]
     # Converte a altura fisica da cartela de pontos de referencia da imagem para pontos PDF.
     scale_y = VOLANTE_PRINT_HEIGHT / VOLANTE_IMAGE_SIZE[1]
+    # Converte o ajuste horizontal de milimetros para pontos PDF.
+    offset_x = offset_x_mm * 72 / 25.4
+    # Converte o ajuste vertical de milimetros para pontos PDF.
+    offset_y = offset_y_mm * 72 / 25.4
     # Cria um documento com uma pagina do tamanho exato de uma cartela.
     pdf = canvas.Canvas(output, pagesize=(VOLANTE_PRINT_WIDTH, VOLANTE_PRINT_HEIGHT))
     # Agrupa jogos de mesmo tamanho em cartelas com ate tres jogos.
@@ -1881,18 +1887,72 @@ def build_direct_print_pdf(games: list[list[int]]) -> bytes:
                 # Calcula a posicao da dezena nas coordenadas da imagem de referencia.
                 mark_x, mark_y, mark_width, mark_height = volante_mark_position(board_index, number)
                 # Desenha o quadrado preto da dezena na escala da cartela fisica.
-                pdf.rect(mark_x * scale_x, VOLANTE_PRINT_HEIGHT - (mark_y + mark_height) * scale_y, mark_width * scale_x, mark_height * scale_y, fill=1, stroke=0)
+                pdf.rect(mark_x * scale_x + offset_x, VOLANTE_PRINT_HEIGHT - (mark_y + mark_height) * scale_y + offset_y, mark_width * scale_x, mark_height * scale_y, fill=1, stroke=0)
         # Verifica que o tamanho selecionado corresponde a uma opcao permitida.
         if game_size in BET_PRICES:
             # Calcula a posicao da marcacao da quantidade de dezenas.
             size_x, size_y, size_width, size_height = volante_size_mark_position(game_size)
             # Desenha a marcacao preta de 15 a 20 dezenas.
-            pdf.rect(size_x * scale_x, VOLANTE_PRINT_HEIGHT - (size_y + size_height) * scale_y, size_width * scale_x, size_height * scale_y, fill=1, stroke=0)
+            pdf.rect(size_x * scale_x + offset_x, VOLANTE_PRINT_HEIGHT - (size_y + size_height) * scale_y + offset_y, size_width * scale_x, size_height * scale_y, fill=1, stroke=0)
         # Finaliza a pagina da cartela para que a impressora avance ao proximo volante.
         pdf.showPage()
     # Grava o documento PDF no buffer.
     pdf.save()
     # Devolve os bytes do PDF para o botao de download.
+    return output.getvalue()
+
+
+# Gera uma cartela de calibracao com casas de referencia e regua de escala.
+def build_calibration_pdf(offset_x_mm: float = 0.0, offset_y_mm: float = 0.0) -> bytes:
+    # Cria um buffer em memoria para o PDF de calibracao.
+    output = BytesIO()
+    # Calcula a escala horizontal do recorte para a cartela fisica.
+    scale_x = VOLANTE_PRINT_WIDTH / VOLANTE_IMAGE_SIZE[0]
+    # Calcula a escala vertical do recorte para a cartela fisica.
+    scale_y = VOLANTE_PRINT_HEIGHT / VOLANTE_IMAGE_SIZE[1]
+    # Converte o deslocamento horizontal informado em pontos PDF.
+    offset_x = offset_x_mm * 72 / 25.4
+    # Converte o deslocamento vertical informado em pontos PDF.
+    offset_y = offset_y_mm * 72 / 25.4
+    # Cria uma pagina do tamanho fisico de uma cartela individual.
+    pdf = canvas.Canvas(output, pagesize=(VOLANTE_PRINT_WIDTH, VOLANTE_PRINT_HEIGHT))
+    # Seleciona preto para as casas de referencia da cartela.
+    pdf.setFillColorRGB(0, 0, 0)
+    # Usa quatro dezenas nos extremos e uma no centro para conferir alinhamento.
+    for number in (1, 5, 13, 21, 25):
+        # Calcula a casa da dezena de referencia na primeira linha de jogo.
+        mark_x, mark_y, mark_width, mark_height = volante_mark_position(0, number)
+        # Imprime o quadrado de referencia na escala e deslocamento configurados.
+        pdf.rect(mark_x * scale_x + offset_x, VOLANTE_PRINT_HEIGHT - (mark_y + mark_height) * scale_y + offset_y, mark_width * scale_x, mark_height * scale_y, fill=1, stroke=0)
+    # Recupera o retangulo de selecao da aposta de quinze dezenas.
+    size_x, size_y, size_width, size_height = volante_size_mark_position(15)
+    # Marca a opcao de quinze dezenas como referencia para alinhamento.
+    pdf.rect(size_x * scale_x + offset_x, VOLANTE_PRINT_HEIGHT - (size_y + size_height) * scale_y + offset_y, size_width * scale_x, size_height * scale_y, fill=1, stroke=0)
+    # Define uma cor cinza escura para a regua que verifica a escala de impressao.
+    pdf.setStrokeColorRGB(0.25, 0.25, 0.25)
+    # Define a espessura da regua em pontos PDF.
+    pdf.setLineWidth(0.6)
+    # Posiciona a regua proximo da borda inferior da pagina de calibracao.
+    ruler_y = VOLANTE_PRINT_HEIGHT * 0.08
+    # Define o inicio horizontal da regua com uma pequena margem.
+    ruler_x = 12
+    # Converte 50 milimetros para pontos PDF.
+    ruler_length = 50 * 72 / 25.4
+    # Desenha a linha horizontal de cinquenta milimetros.
+    pdf.line(ruler_x, ruler_y, ruler_x + ruler_length, ruler_y)
+    # Desenha a marca vertical no inicio da regua.
+    pdf.line(ruler_x, ruler_y - 4, ruler_x, ruler_y + 4)
+    # Desenha a marca vertical no final da regua.
+    pdf.line(ruler_x + ruler_length, ruler_y - 4, ruler_x + ruler_length, ruler_y + 4)
+    # Define uma fonte pequena para a identificacao da medida.
+    pdf.setFont("Helvetica", 7)
+    # Imprime a medida nominal para comparar com uma regua fisica.
+    pdf.drawString(ruler_x, ruler_y + 5, "50 mm - imprimir a 100%")
+    # Finaliza a unica pagina do arquivo de calibracao.
+    pdf.showPage()
+    # Grava o documento PDF no buffer.
+    pdf.save()
+    # Devolve o arquivo de calibracao para o download.
     return output.getvalue()
 
 # Renderiza o modulo de geracao por grupos configuraveis.
@@ -2882,6 +2942,22 @@ def render_print_module() -> None:
     games, errors = parse_print_games(games_text)
     # Permite escolher a folha A4 atual ou a impressao direta em cartela avulsa.
     print_mode = st.radio("Formato de impressão", ["Folha A4 com scanner", "Impressão direta na cartela"], horizontal=True, key="print_mode")
+    # Inicia os deslocamentos sem ajuste para o formato A4.
+    offset_x_mm = 0.0
+    # Inicia os deslocamentos verticais sem ajuste para o formato A4.
+    offset_y_mm = 0.0
+    # Exibe controles de alinhamento e calibracao exclusivos da impressao direta.
+    if print_mode == "Impressão direta na cartela":
+        # Cria colunas para os dois eixos de ajuste da impressora.
+        offset_columns = st.columns(2)
+        # Permite deslocar as marcacoes para a direita ou esquerda em milimetros.
+        offset_x_mm = offset_columns[0].number_input("Ajuste horizontal (mm)", min_value=-5.0, max_value=5.0, value=0.0, step=0.1, key="print_offset_x_mm", help="Valores positivos movem as marcações para a direita.")
+        # Permite deslocar as marcacoes para cima ou para baixo em milimetros.
+        offset_y_mm = offset_columns[1].number_input("Ajuste vertical (mm)", min_value=-5.0, max_value=5.0, value=0.0, step=0.1, key="print_offset_y_mm", help="Valores positivos movem as marcações para cima.")
+        # Orienta a calibracao da escala pela regua impressa.
+        st.caption("Imprima primeiro em uma cartela de teste: a página inclui marcas de referência e uma régua de 50 mm para conferir alinhamento e escala.")
+        # Cria e oferece a cartela de calibracao com os deslocamentos atuais.
+        st.download_button("Baixar cartela de calibração", data=build_calibration_pdf(offset_x_mm, offset_y_mm), file_name="calibracao_impressora_loto.pdf", mime="application/pdf", use_container_width=True)
     # Verifica se `games`.
     if games:
         # count_column, page_column recebe o valor que cria as colunas da interface usadas para organizar os controles.
@@ -2898,6 +2974,10 @@ def render_print_module() -> None:
             page_column.metric("Folhas A4", print_page_count(games))
         # Chama `st.caption` para mostra uma legenda auxiliar ao usuario.
         st.caption("Jogos com a mesma quantidade de dezenas ficam juntos no mesmo volante.")
+        # Identifica jogos com quantidades diferentes de dezenas.
+        if len({len(game) for game in games}) > 1:
+            # Avisa que tamanhos distintos ficam em cartelas fisicas separadas.
+            st.warning("Há jogos com quantidades diferentes de dezenas. Eles serão impressos em cartelas separadas para não compartilhar a marcação de tamanho.")
         # Explica como funciona a alimentacao da impressora no modo direto.
         if print_mode == "Impressão direta na cartela":
             # Informa o tamanho de pagina e que cada uma avanca uma cartela.
@@ -2924,19 +3004,43 @@ def render_print_module() -> None:
     if not games and not errors:
         # Chama `st.info` para mostra uma mensagem informativa.
         st.info("Cole os jogos acima para preparar o PDF.")
-    # Escolhe a funcao de geracao e o nome conforme o formato selecionado.
-    pdf_data = build_direct_print_pdf(games) if games and not errors and print_mode == "Impressão direta na cartela" else build_games_pdf(games) if games and not errors else b""
+    # Gera o PDF no formato escolhido quando todas as linhas sao validas.
+    pdf_data = build_direct_print_pdf(games, offset_x_mm, offset_y_mm) if games and not errors and print_mode == "Impressão direta na cartela" else build_games_pdf(games) if games and not errors else b""
     # Define o rotulo e o nome de arquivo para a modalidade escolhida.
     pdf_label = "Gerar PDF para impressão direta" if print_mode == "Impressão direta na cartela" else "Gerar PDF da Folha Loto"
     # Define o nome de arquivo correspondente ao formato selecionado.
     pdf_filename = "marcacoes_diretas_cartela.pdf" if print_mode == "Impressão direta na cartela" else "folha_loto.pdf"
+    # Exibe uma previa da primeira pagina e a distribuicao dos jogos por tamanho.
+    if games and not errors:
+        # Reune as cartelas agrupadas para resumir a distribuicao da impressao.
+        print_cards = group_print_cards(games)
+        # Abre um painel que pode ser expandido para ver a previa do arquivo.
+        with st.expander("Prévia do PDF e distribuição"):
+            # Resume a quantidade de jogos em cada tamanho de aposta.
+            for size in sorted({len(game) for game in games}):
+                # Conta jogos daquele tamanho.
+                games_of_size = sum(1 for game in games if len(game) == size)
+                # Calcula quantas cartelas fisicas receberao esse tamanho.
+                cards_of_size = math.ceil(games_of_size / 3)
+                # Apresenta a distribuicao de jogos em cartelas para aquele tamanho.
+                st.write(f"{size} dezenas: {games_of_size} jogo(s) em {cards_of_size} cartela(s).")
+            # Escolhe a primeira cartela para o modo direto ou ate quatro no modo A4.
+            preview_cards = print_cards[:1] if print_mode == "Impressão direta na cartela" else print_cards[:VOLANTES_PER_PAGE]
+            # Converte as cartelas da primeira pagina em uma lista de jogos.
+            preview_games = [game for _, card_games in preview_cards for game in card_games]
+            # Gera somente a pagina de previa no formato selecionado.
+            preview_pdf = build_direct_print_pdf(preview_games, offset_x_mm, offset_y_mm) if print_mode == "Impressão direta na cartela" else build_games_pdf(preview_games)
+            # Codifica o PDF para incorporacao no visualizador da pagina.
+            preview_encoded = base64.b64encode(preview_pdf).decode("ascii")
+            # Exibe a primeira pagina em um leitor PDF incorporado.
+            st.markdown(f'<iframe src="data:application/pdf;base64,{preview_encoded}" width="100%" height="640" style="border: 1px solid #ddd; border-radius: 8px;"></iframe>', unsafe_allow_html=True)
     # Cria o botao de download para o PDF do formato selecionado.
     st.download_button(
         # Fornece este texto como item da colecao ou argumento da chamada iniciada acima.
         pdf_label,
         # Envia os bytes do PDF gerado no modo de impressao selecionado.
         data=pdf_data,
-        # file_name recebe o valor que define o texto ou identificador `"folha_loto.pdf",` usado nesta etapa.
+        # Define o nome do arquivo conforme o formato de impressao selecionado.
         file_name=pdf_filename,
         # mime recebe o valor que define o texto ou identificador `"application/pdf",` usado nesta etapa.
         mime="application/pdf",
