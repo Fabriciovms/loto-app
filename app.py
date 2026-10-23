@@ -32,10 +32,10 @@ LOTOFACIL_MIN = 1
 LOTOFACIL_MAX = 25
 # ALL_NUMBERS guarda a lista de dezenas validas entre os limites configurados.
 ALL_NUMBERS = list(range(LOTOFACIL_MIN, LOTOFACIL_MAX + 1))
-# API_URL guarda o endereco da API para consultar o concurso mais recente.
-API_URL = "https://loteriascaixa-api.herokuapp.com/api/lotofacil/latest"
-# API_CONTEST_URL guarda o modelo de endereco da API para consultar um concurso especifico.
-API_CONTEST_URL = "https://loteriascaixa-api.herokuapp.com/api/lotofacil/{contest}"
+# API_URL aponta diretamente para o endpoint oficial de resultados da CAIXA.
+API_URL = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil"
+# API_CONTEST_URL monta o endereco oficial para um concurso especifico.
+API_CONTEST_URL = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil/{contest}"
 
 # Tabela vigente da aposta da Lotofácil (CAIXA). Uma aposta com mais de 15
 # dezenas equivale a várias apostas simples e por isso tem preço próprio.
@@ -1454,24 +1454,51 @@ def find_overlap_warnings(fixed: list[int], groups: list[tuple[list[int], int]])
     return warnings
 
 
+# Converte o formato oficial da CAIXA para os campos usados pelo conferidor.
+def normalize_caixa_result(payload: dict) -> dict:
+    # Converte as faixas oficiais em uma lista simples de premiacoes.
+    prizes = [
+        # Mantem descricao e valor unitario para o calculo de premios existente.
+        {"descricao": item["descricaoFaixa"], "valorPremio": item["valorPremio"]}
+        # Percorre cada faixa de premio enviada pela CAIXA.
+        for item in payload.get("listaRateioPremio", [])
+    # Fecha a lista de faixas normalizadas.
+    ]
+    # Devolve o concurso no modelo interno que o restante do conferidor espera.
+    return {
+        # Mapeia o numero oficial do concurso para o campo interno.
+        "concurso": payload["numero"],
+        # Mapeia a data oficial para o campo interno.
+        "data": payload["dataApuracao"],
+        # Mapeia a lista oficial de dezenas sorteadas.
+        "dezenas": payload["listaDezenas"],
+        # Mapeia as faixas oficiais de premio.
+        "premiacoes": prizes,
+    }
+
+
 # Busca na API o resultado mais recente da Lotofacil.
 def fetch_latest_result() -> dict:
-    # response recebe o valor que guarda a resposta HTTP da consulta ao servico externo.
-    response = requests.get(API_URL, timeout=15)
+    # Define cabecalhos para identificar uma solicitacao web comum ao endpoint da CAIXA.
+    headers = {"Accept": "application/json, text/plain, */*", "User-Agent": "Mozilla/5.0 LotofacilApp/1.0"}
+    # Consulta o endpoint oficial com limite de tempo para evitar espera indefinida.
+    response = requests.get(API_URL, headers=headers, timeout=15)
     # Chama `response.raise_for_status` para interrompe a consulta quando a API retorna erro HTTP.
     response.raise_for_status()
-    # Devolve response.json() ao codigo que chamou esta funcao.
-    return response.json()
+    # Converte a resposta oficial para os campos esperados pelo aplicativo.
+    return normalize_caixa_result(response.json())
 
 
 # Busca na API o resultado do concurso solicitado.
 def fetch_contest_result(contest: int) -> dict:
-    # response recebe o valor que guarda a resposta HTTP da consulta ao servico externo.
-    response = requests.get(API_CONTEST_URL.format(contest=contest), timeout=15)
+    # Define cabecalhos para identificar uma solicitacao web comum ao endpoint da CAIXA.
+    headers = {"Accept": "application/json, text/plain, */*", "User-Agent": "Mozilla/5.0 LotofacilApp/1.0"}
+    # Consulta o concurso solicitado diretamente na API oficial.
+    response = requests.get(API_CONTEST_URL.format(contest=contest), headers=headers, timeout=15)
     # Chama `response.raise_for_status` para interrompe a consulta quando a API retorna erro HTTP.
     response.raise_for_status()
-    # Devolve response.json() ao codigo que chamou esta funcao.
-    return response.json()
+    # Converte a resposta oficial para os campos esperados pelo aplicativo.
+    return normalize_caixa_result(response.json())
 
 
 # Converte a data textual do resultado para um objeto date.
@@ -2462,7 +2489,7 @@ def render_checker():
                 # Compoe a expressao ou os argumentos da operacao iniciada acima.
                 st.session_state["auto_check_pending"] = False
                 # Chama `st.error` para mostra uma mensagem de erro.
-                st.error(f"Erro ao buscar os últimos concursos: {exc}")
+                st.error(f"Não foi possível consultar a API oficial da CAIXA. Verifique a conexão ou se o firewall/antivírus permite conexões HTTPS do Python. Detalhe: {exc}")
                 # Devolve o controle ao chamador sem valor ao codigo que chamou esta funcao.
                 return
 
@@ -2515,7 +2542,7 @@ def render_checker():
             # Trata a excecao indicada para permitir uma resposta controlada ao erro.
             except requests.RequestException as exc:
                 # Chama `st.error` para mostra uma mensagem de erro.
-                st.error(f"Erro ao buscar resultados: {exc}")
+                st.error(f"Não foi possível consultar a API oficial da CAIXA. Verifique a conexão ou se o firewall/antivírus permite conexões HTTPS do Python. Detalhe: {exc}")
                 # Devolve o controle ao chamador sem valor ao codigo que chamou esta funcao.
                 return
 
