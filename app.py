@@ -1416,8 +1416,8 @@ def render_group_generator() -> None:
     configured_groups = []
     # Percorre cada grupo e seus controles de selecao.
     for group_index, (group_range, default_pick, group_column) in enumerate(zip(ranges, default_picks, group_columns)):
-        # Mostra o intervalo que identifica este grupo.
-        group_column.markdown(f"**Grupo {group_index + 1}**  \n{group_range.start:02d}–{group_range.stop - 1:02d}")
+        # Mostra os limites do intervalo armazenado como uma tupla de dezenas.
+        group_column.markdown(f"**Grupo {group_index + 1}**  \n{group_range[0]:02d}–{group_range[-1]:02d}")
         # Prepara a selecao das dezenas deste grupo.
         selected_numbers = []
         # Adiciona por padrao somente a dezena 3 no primeiro grupo e todas nas demais faixas.
