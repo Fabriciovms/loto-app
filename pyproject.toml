@@ -1,0 +1,11 @@
+[project]
+name = "loto-app"
+version = "0.1.0"
+description = "Gerador, conferidor e impressor de jogos Lotofacil"
+requires-python = ">=3.10"
+dependencies = [
+    "streamlit>=1.38,<2",
+    "requests>=2.32,<3",
+    "Pillow>=10,<12",
+    "reportlab>=4,<5",
+]

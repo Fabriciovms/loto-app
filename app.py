@@ -1,22 +1,32 @@
 # itertools importa utilitarios para combinar grupos e percorrer produtos cartesianos.
 import itertools
+# csv escreve os resultados completos da conferencia em um arquivo CSV.
+import csv
+# ThreadPoolExecutor consulta concursos historicos simultaneamente.
+from concurrent.futures import ThreadPoolExecutor
 # base64 codifica a previa PDF para exibi-la em um quadro incorporado.
 import base64
 # math importa operacoes matematicas como combinacoes e teto de paginas.
 import math
 # re importa expressoes regulares para localizar dezenas em textos.
 import re
-# io importa buffers em memoria usados para imagens e arquivos PDF.
-from io import BytesIO
+# io importa buffers em memoria usados para imagens, texto CSV e arquivos PDF.
+from io import BytesIO, StringIO
 # datetime importa tipos e funcoes para lidar com datas de concursos.
 from datetime import date, datetime, timedelta
 # itertools importa utilitarios para combinar grupos e percorrer produtos cartesianos.
 from itertools import combinations
 # pathlib importa caminhos de arquivo independentes do sistema operacional.
 from pathlib import Path
+# local guarda uma sessao HTTP separada para cada thread de consulta.
+from threading import local
 
 # requests importa o cliente HTTP usado para consultar os resultados da API.
 import requests
+# HTTPAdapter instala repeticoes automaticas nas conexoes HTTP.
+from requests.adapters import HTTPAdapter
+# Retry configura tentativas com espera progressiva para falhas transitórias.
+from urllib3.util.retry import Retry
 # streamlit importa a biblioteca que renderiza a interface web do aplicativo.
 import streamlit as st
 # PIL importa ferramentas de leitura e conversao de imagens.
@@ -34,10 +44,20 @@ LOTOFACIL_MIN = 1
 LOTOFACIL_MAX = 25
 # ALL_NUMBERS guarda a lista de dezenas validas entre os limites configurados.
 ALL_NUMBERS = list(range(LOTOFACIL_MIN, LOTOFACIL_MAX + 1))
+# MAX_GENERATED_GAMES limita a quantidade de combinacoes materializadas na memoria.
+MAX_GENERATED_GAMES = 50_000
+# GROUP_RANGES define os cinco grupos fixos do gerador por grupos.
+GROUP_RANGES = tuple(tuple(range(start, start + 5)) for start in range(1, 26, 5))
+# GROUP_DEFAULT_PICKS reproduz as quantidades iniciais da planilha enviada.
+GROUP_DEFAULT_PICKS = (1, 4, 3, 4, 3)
+# GROUP_DEFAULT_SELECTED_NUMBERS inicia o primeiro grupo apenas com 03 e os demais completos.
+GROUP_DEFAULT_SELECTED_NUMBERS = {3, *range(6, 26)}
 # API_URL aponta diretamente para o endpoint oficial de resultados da CAIXA.
 API_URL = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil"
 # API_CONTEST_URL monta o endereco oficial para um concurso especifico.
 API_CONTEST_URL = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofacil/{contest}"
+# API_THREAD_LOCAL mantem conexoes HTTP independentes nas consultas paralelas.
+API_THREAD_LOCAL = local()
 
 # Tabela vigente da aposta da Lotofácil (CAIXA). Uma aposta com mais de 15
 # dezenas equivale a várias apostas simples e por isso tem preço próprio.
@@ -45,645 +65,10 @@ API_CONTEST_URL = "https://servicebus2.caixa.gov.br/portaldeloterias/api/lotofac
 BET_PRICES = {15: 3.50, 16: 56.00, 17: 476.00, 18: 2856.00, 19: 13566.00, 20: 54264.00}
 
 # Guarda as regras CSS que controlam a aparencia e o layout responsivo da interface.
-MODERN_CSS = """
-<style>
-    /* Importa a fonte web usada nos textos e titulos do aplicativo. */
-    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Outfit:wght@600;700;800&display=swap');
-
-    /* Fontes Globais e Estilo Base */
-    /* Seleciona `html, body, .stApp, p, h1, h2, h3, h4, h5, h6, label, input, textarea, select` para aplicar as regras visuais logo abaixo. */
-    html, body, .stApp, p, h1, h2, h3, h4, h5, h6, label, input, textarea, select {
-        /* Escolhe a familia tipografica com o valor `'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif`. */
-        font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-    }
-
-    /* Preservar ícones nativos do Streamlit e do Expander */
-    /* Completa a regra visual CSS `[data-testid="stIconMaterial"],`. */
-    [data-testid="stIconMaterial"],
-    /* Completa a regra visual CSS `[class*="MaterialSymbols"],`. */
-    [class*="MaterialSymbols"],
-    /* Completa a regra visual CSS `[class*="material-icons"],`. */
-    [class*="material-icons"],
-    /* Completa a regra visual CSS `div[data-testid="stExpander"] summary *,`. */
-    div[data-testid="stExpander"] summary *,
-    /* Seleciona `div[data-testid="stExpander"] i` para aplicar as regras visuais logo abaixo. */
-    div[data-testid="stExpander"] i {
-        /* Escolhe a familia tipografica com o valor `'Material Symbols Outlined', 'Material Icons', inherit !important`. */
-        font-family: 'Material Symbols Outlined', 'Material Icons', inherit !important;
-    }
-
-    /* Ocultar elementos nativos desnecessários */
-    /* Define a propriedade `#mainmenu {visibility` com o valor `hidden;}`. */
-    #MainMenu {visibility: hidden;}
-    /* Define a propriedade `footer {visibility` com o valor `hidden;}`. */
-    footer {visibility: hidden;}
-
-    /* Estilização limpa para Expanders */
-    /* Seleciona `div[data-testid="stExpander"]` para aplicar as regras visuais logo abaixo. */
-    div[data-testid="stExpander"] {
-        /* Arredonda os cantos com o valor `14px !important`. */
-        border-radius: 14px !important;
-        /* Define a borda e sua espessura com o valor `1px solid #e2e8f0 !important`. */
-        border: 1px solid #e2e8f0 !important;
-        /* Aplica sombra com o valor `0 4px 12px rgba(0, 0, 0, 0.03) !important`. */
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03) !important;
-        /* Define o fundo ou preenchimento com o valor `#ffffff !important`. */
-        background: #ffffff !important;
-        /* Define o espaco abaixo do componente com o valor `1rem !important`. */
-        margin-bottom: 1rem !important;
-        /* Controla o conteudo que ultrapassa os limites com o valor `hidden !important`. */
-        overflow: hidden !important;
-    }
-    /* Seleciona `div[data-testid="stExpander"] summary` para aplicar as regras visuais logo abaixo. */
-    div[data-testid="stExpander"] summary {
-        /* Define o peso da fonte com o valor `700 !important`. */
-        font-weight: 700 !important;
-        /* Define a cor do texto com o valor `#1e1b4b !important`. */
-        color: #1e1b4b !important;
-        /* Define o tamanho do texto com o valor `1rem !important`. */
-        font-size: 1rem !important;
-    }
-
-    /* Hero Header Moderno */
-    /* Seleciona `.hero-container` para aplicar as regras visuais logo abaixo. */
-    .hero-container {
-        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #4c1d95 100%)`. */
-        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #4c1d95 100%);
-        /* Arredonda os cantos com o valor `20px`. */
-        border-radius: 20px;
-        /* Define o espaco interno com o valor `2.2rem 2rem`. */
-        padding: 2.2rem 2rem;
-        /* Define a cor do texto com o valor `#ffffff`. */
-        color: #ffffff;
-        /* Aplica sombra com o valor `0 15px 35px -5px rgba(76, 29, 149, 0.35)`. */
-        box-shadow: 0 15px 35px -5px rgba(76, 29, 149, 0.35);
-        /* Define o espaco abaixo do componente com o valor `1.8rem`. */
-        margin-bottom: 1.8rem;
-        /* Define o posicionamento com o valor `relative`. */
-        position: relative;
-        /* Controla o conteudo que ultrapassa os limites com o valor `hidden`. */
-        overflow: hidden;
-        /* Define a borda e sua espessura com o valor `1px solid rgba(255, 255, 255, 0.15)`. */
-        border: 1px solid rgba(255, 255, 255, 0.15);
-    }
-    /* Seleciona `.hero-container::before` para aplicar as regras visuais logo abaixo. */
-    .hero-container::before {
-        /* Define o conteudo gerado com o valor `""`. */
-        content: "";
-        /* Define o posicionamento com o valor `absolute`. */
-        position: absolute;
-        /* Define a distancia do topo com o valor `-50%`. */
-        top: -50%;
-        /* Define a distancia da direita com o valor `-10%`. */
-        right: -10%;
-        /* Define a largura com o valor `300px`. */
-        width: 300px;
-        /* Define a altura com o valor `300px`. */
-        height: 300px;
-        /* Define o fundo ou preenchimento com o valor `radial-gradient(circle, rgba(168, 85, 247, 0.3) 0%, rgba(0,0,0,0) 70%)`. */
-        background: radial-gradient(circle, rgba(168, 85, 247, 0.3) 0%, rgba(0,0,0,0) 70%);
-        /* Arredonda os cantos com o valor `50%`. */
-        border-radius: 50%;
-        /* Controla se o elemento recebe eventos do ponteiro com o valor `none`. */
-        pointer-events: none;
-    }
-    /* Seleciona `.hero-badge` para aplicar as regras visuais logo abaixo. */
-    .hero-badge {
-        /* Define como o elemento participa do layout com o valor `inline-flex`. */
-        display: inline-flex;
-        /* Alinha itens no eixo transversal com o valor `center`. */
-        align-items: center;
-        /* Define o espaco entre itens com o valor `6px`. */
-        gap: 6px;
-        /* Define o fundo ou preenchimento com o valor `rgba(255, 255, 255, 0.15)`. */
-        background: rgba(255, 255, 255, 0.15);
-        /* Aplica filtro ao conteudo atres do elemento com o valor `blur(10px)`. */
-        backdrop-filter: blur(10px);
-        /* Define o espaco interno com o valor `4px 14px`. */
-        padding: 4px 14px;
-        /* Arredonda os cantos com o valor `20px`. */
-        border-radius: 20px;
-        /* Define o tamanho do texto com o valor `0.78rem`. */
-        font-size: 0.78rem;
-        /* Define o peso da fonte com o valor `700`. */
-        font-weight: 700;
-        /* Define o espacamento entre letras com o valor `0.08em`. */
-        letter-spacing: 0.08em;
-        /* Transforma a apresentacao de maiusculas/minusculas com o valor `uppercase`. */
-        text-transform: uppercase;
-        /* Define a cor do texto com o valor `#e9d5ff`. */
-        color: #e9d5ff;
-        /* Define a borda e sua espessura com o valor `1px solid rgba(255, 255, 255, 0.2)`. */
-        border: 1px solid rgba(255, 255, 255, 0.2);
-        /* Define o espaco abaixo do componente com o valor `0.75rem`. */
-        margin-bottom: 0.75rem;
-    }
-    /* Seleciona `.hero-title` para aplicar as regras visuais logo abaixo. */
-    .hero-title {
-        /* Escolhe a familia tipografica com o valor `'Outfit', sans-serif`. */
-        font-family: 'Outfit', sans-serif;
-        /* Define o tamanho do texto com o valor `2.4rem`. */
-        font-size: 2.4rem;
-        /* Define o peso da fonte com o valor `800`. */
-        font-weight: 800;
-        /* Define o espaco externo com o valor `0`. */
-        margin: 0;
-        /* Define a propriedade `line-height` com o valor `1.15`. */
-        line-height: 1.15;
-        /* Define o fundo ou preenchimento com o valor `linear-gradient(120deg, #ffffff 30%, #f3e8ff 70%, #d8b4fe 100%)`. */
-        background: linear-gradient(120deg, #ffffff 30%, #f3e8ff 70%, #d8b4fe 100%);
-        /* Recorta o fundo pela forma do texto com o valor `text`. */
-        -webkit-background-clip: text;
-        /* Define o preenchimento do texto em navegadores webkit com o valor `transparent`. */
-        -webkit-text-fill-color: transparent;
-    }
-    /* Seleciona `.hero-subtitle` para aplicar as regras visuais logo abaixo. */
-    .hero-subtitle {
-        /* Define a cor do texto com o valor `#c084fc`. */
-        color: #c084fc;
-        /* Define o tamanho do texto com o valor `0.98rem`. */
-        font-size: 0.98rem;
-        /* Define o peso da fonte com o valor `500`. */
-        font-weight: 500;
-        /* Define o espaco acima do componente com o valor `0.5rem`. */
-        margin-top: 0.5rem;
-        /* Define o espaco abaixo do componente com o valor `0`. */
-        margin-bottom: 0;
-    }
-
-    /* Cartela de Dezenas Interativa (Volante) */
-    /* Seleciona `.ticket-card` para aplicar as regras visuais logo abaixo. */
-    .ticket-card {
-        /* Define o fundo ou preenchimento com o valor `#ffffff`. */
-        background: #ffffff;
-        /* Arredonda os cantos com o valor `20px`. */
-        border-radius: 20px;
-        /* Define a borda e sua espessura com o valor `1px solid #e2e8f0`. */
-        border: 1px solid #e2e8f0;
-        /* Aplica sombra com o valor `0 10px 30px -5px rgba(0, 0, 0, 0.06)`. */
-        box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.06);
-        /* Controla o conteudo que ultrapassa os limites com o valor `hidden`. */
-        overflow: hidden;
-        /* Define o espaco externo com o valor `0 auto`. */
-        margin: 0 auto;
-        /* Suaviza as mudancas visuais com o valor `all 0.3s ease`. */
-        transition: all 0.3s ease;
-    }
-    /* Seleciona `.ticket-header` para aplicar as regras visuais logo abaixo. */
-    .ticket-header {
-        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #831843 0%, #be185d 50%, #9d174d 100%)`. */
-        background: linear-gradient(135deg, #831843 0%, #be185d 50%, #9d174d 100%);
-        /* Define o espaco interno com o valor `1rem 1.25rem`. */
-        padding: 1rem 1.25rem;
-        /* Define a propriedade `text-align` com o valor `center`. */
-        text-align: center;
-        /* Define a cor do texto com o valor `#ffffff`. */
-        color: #ffffff;
-    }
-    /* Seleciona `.ticket-header-title` para aplicar as regras visuais logo abaixo. */
-    .ticket-header-title {
-        /* Escolhe a familia tipografica com o valor `'Outfit', sans-serif`. */
-        font-family: 'Outfit', sans-serif;
-        /* Define o tamanho do texto com o valor `1.35rem`. */
-        font-size: 1.35rem;
-        /* Define o peso da fonte com o valor `800`. */
-        font-weight: 800;
-        /* Define o espacamento entre letras com o valor `0.12em`. */
-        letter-spacing: 0.12em;
-        /* Define o espaco externo com o valor `0`. */
-        margin: 0;
-        /* Transforma a apresentacao de maiusculas/minusculas com o valor `uppercase`. */
-        text-transform: uppercase;
-    }
-    /* Seleciona `.ticket-header-sub` para aplicar as regras visuais logo abaixo. */
-    .ticket-header-sub {
-        /* Define o tamanho do texto com o valor `0.76rem`. */
-        font-size: 0.76rem;
-        /* Define o peso da fonte com o valor `600`. */
-        font-weight: 600;
-        /* Define a cor do texto com o valor `#fbcfe8`. */
-        color: #fbcfe8;
-        /* Define o espaco acima do componente com o valor `4px`. */
-        margin-top: 4px;
-        /* Define o espacamento entre letras com o valor `0.04em`. */
-        letter-spacing: 0.04em;
-    }
-    /* Seleciona `.ticket-body` para aplicar as regras visuais logo abaixo. */
-    .ticket-body {
-        /* Define o espaco interno com o valor `1.2rem`. */
-        padding: 1.2rem;
-        /* Define o fundo ou preenchimento com o valor `#fafafa`. */
-        background: #fafafa;
-    }
-    /* Seleciona `.ticket-legend` para aplicar as regras visuais logo abaixo. */
-    .ticket-legend {
-        /* Define como o elemento participa do layout com o valor `flex`. */
-        display: flex;
-        /* Distribui itens no eixo principal com o valor `center`. */
-        justify-content: center;
-        /* Alinha itens no eixo transversal com o valor `center`. */
-        align-items: center;
-        /* Define o espaco entre itens com o valor `12px`. */
-        gap: 12px;
-        /* Define o espaco interno com o valor `0.75rem`. */
-        padding: 0.75rem;
-        /* Define o fundo ou preenchimento com o valor `#ffffff`. */
-        background: #ffffff;
-        /* Define a propriedade `border-top` com o valor `1px solid #f1f5f9`. */
-        border-top: 1px solid #f1f5f9;
-        /* Define o tamanho do texto com o valor `0.78rem`. */
-        font-size: 0.78rem;
-        /* Define o peso da fonte com o valor `600`. */
-        font-weight: 600;
-        /* Define a cor do texto com o valor `#475569`. */
-        color: #475569;
-        /* Permite que os itens quebrem para a linha seguinte com o valor `wrap`. */
-        flex-wrap: wrap;
-    }
-    /* Seleciona `.legend-item` para aplicar as regras visuais logo abaixo. */
-    .legend-item {
-        /* Define como o elemento participa do layout com o valor `inline-flex`. */
-        display: inline-flex;
-        /* Alinha itens no eixo transversal com o valor `center`. */
-        align-items: center;
-        /* Define o espaco entre itens com o valor `6px`. */
-        gap: 6px;
-    }
-    /* Seleciona `.legend-dot` para aplicar as regras visuais logo abaixo. */
-    .legend-dot {
-        /* Define a largura com o valor `10px`. */
-        width: 10px;
-        /* Define a altura com o valor `10px`. */
-        height: 10px;
-        /* Arredonda os cantos com o valor `50%`. */
-        border-radius: 50%;
-    }
-    /* Define a propriedade `.dot-fixed { background` com o valor `#be185d; box-shadow: 0 0 6px rgba(190, 24, 93, 0.5); }`. */
-    .dot-fixed { background: #be185d; box-shadow: 0 0 6px rgba(190, 24, 93, 0.5); }
-    /* Define a propriedade `.dot-variable { background` com o valor `#2563eb; box-shadow: 0 0 6px rgba(37, 99, 235, 0.5); }`. */
-    .dot-variable { background: #2563eb; box-shadow: 0 0 6px rgba(37, 99, 235, 0.5); }
-    /* Define a propriedade `.dot-extra { background` com o valor `#10b981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.5); }`. */
-    .dot-extra { background: #10b981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.5); }
-    /* Define a propriedade `.dot-empty { background` com o valor `#e2e8f0; }`. */
-    .dot-empty { background: #e2e8f0; }
-
-    /* Estilização dos Botões de Dezenas (Pílulas) - usando st-key do Streamlit */
-    /* Completa a regra visual CSS `[class*="st-key-btn_ticket_"] button,`. */
-    [class*="st-key-btn_ticket_"] button,
-    /* Completa a regra visual CSS `[class*="st-key-btn_sel_"] button,`. */
-    [class*="st-key-btn_sel_"] button,
-    /* Seleciona `[class*="st-key-btn_extra_"] button` para aplicar as regras visuais logo abaixo. */
-    [class*="st-key-btn_extra_"] button {
-        /* Arredonda os cantos com o valor `12px !important`. */
-        border-radius: 12px !important;
-        /* Escolhe a familia tipografica com o valor `'Plus Jakarta Sans', sans-serif !important`. */
-        font-family: 'Plus Jakarta Sans', sans-serif !important;
-        /* Define o tamanho do texto com o valor `0.95rem !important`. */
-        font-size: 0.95rem !important;
-        /* Define o peso da fonte com o valor `700 !important`. */
-        font-weight: 700 !important;
-        /* Define a altura com o valor `2.6rem !important`. */
-        height: 2.6rem !important;
-        /* Define a altura minima com o valor `2.6rem !important`. */
-        min-height: 2.6rem !important;
-        /* Define o espaco interno com o valor `0 !important`. */
-        padding: 0 !important;
-        /* Define a largura com o valor `100% !important`. */
-        width: 100% !important;
-        /* Suaviza as mudancas visuais com o valor `all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important`. */
-        transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
-    }
-
-    /* Estado Desmarcado (3º Clique / Neutro - BRANCO) */
-    /* Completa a regra visual CSS `[class*="st-key-btn_ticket_"][class*="_empty"] button,`. */
-    [class*="st-key-btn_ticket_"][class*="_empty"] button,
-    /* Completa a regra visual CSS `[class*="st-key-btn_sel_"][class*="_empty"] button,`. */
-    [class*="st-key-btn_sel_"][class*="_empty"] button,
-    /* Seleciona `[class*="st-key-btn_extra_"][class*="_empty"] button` para aplicar as regras visuais logo abaixo. */
-    [class*="st-key-btn_extra_"][class*="_empty"] button {
-        /* Define o fundo ou preenchimento com o valor `#ffffff !important`. */
-        background: #ffffff !important;
-        /* Define a cor do fundo com o valor `#ffffff !important`. */
-        background-color: #ffffff !important;
-        /* Define a borda e sua espessura com o valor `1.5px solid #cbd5e1 !important`. */
-        border: 1.5px solid #cbd5e1 !important;
-        /* Define a cor do texto com o valor `#334155 !important`. */
-        color: #334155 !important;
-        /* Aplica sombra com o valor `0 2px 4px rgba(0,0,0,0.02) !important`. */
-        box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
-    }
-    /* Define a propriedade `[class*="st-key-btn_ticket_"][class*="_empty"] button` com o valor `hover,`. */
-    [class*="st-key-btn_ticket_"][class*="_empty"] button:hover,
-    /* Define a propriedade `[class*="st-key-btn_sel_"][class*="_empty"] button` com o valor `hover,`. */
-    [class*="st-key-btn_sel_"][class*="_empty"] button:hover,
-    /* Seleciona `[class*="st-key-btn_extra_"][class*="_empty"] button:hover` para aplicar as regras visuais logo abaixo. */
-    [class*="st-key-btn_extra_"][class*="_empty"] button:hover {
-        /* Define o fundo ou preenchimento com o valor `#f1f5f9 !important`. */
-        background: #f1f5f9 !important;
-        /* Define a cor do fundo com o valor `#f1f5f9 !important`. */
-        background-color: #f1f5f9 !important;
-        /* Define a cor da borda com o valor `#94a3b8 !important`. */
-        border-color: #94a3b8 !important;
-        /* Define a cor do texto com o valor `#0f172a !important`. */
-        color: #0f172a !important;
-        /* Aplica uma transformacao visual com o valor `translateY(-2px) !important`. */
-        transform: translateY(-2px) !important;
-        /* Aplica sombra com o valor `0 4px 8px rgba(0,0,0,0.06) !important`. */
-        box-shadow: 0 4px 8px rgba(0,0,0,0.06) !important;
-    }
-
-    /* Estado Dezena Fixa (1º CLIQUE - VINHO / MAGENTA) */
-    /* Seleciona `[class*="st-key-btn_ticket_"][class*="_fixed"] button` para aplicar as regras visuais logo abaixo. */
-    [class*="st-key-btn_ticket_"][class*="_fixed"] button {
-        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #831843 0%, #be185d 100%) !important`. */
-        background: linear-gradient(135deg, #831843 0%, #be185d 100%) !important;
-        /* Define a cor do fundo com o valor `#be185d !important`. */
-        background-color: #be185d !important;
-        /* Define a borda e sua espessura com o valor `1.5px solid #831843 !important`. */
-        border: 1.5px solid #831843 !important;
-        /* Define a cor do texto com o valor `#ffffff !important`. */
-        color: #ffffff !important;
-        /* Aplica sombra com o valor `0 4px 14px rgba(190, 24, 93, 0.45) !important`. */
-        box-shadow: 0 4px 14px rgba(190, 24, 93, 0.45) !important;
-        /* Aplica uma transformacao visual com o valor `translateY(-1px) !important`. */
-        transform: translateY(-1px) !important;
-    }
-    /* Seleciona `[class*="st-key-btn_ticket_"][class*="_fixed"] button:hover` para aplicar as regras visuais logo abaixo. */
-    [class*="st-key-btn_ticket_"][class*="_fixed"] button:hover {
-        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #9d174d 0%, #db2777 100%) !important`. */
-        background: linear-gradient(135deg, #9d174d 0%, #db2777 100%) !important;
-        /* Define a cor do fundo com o valor `#db2777 !important`. */
-        background-color: #db2777 !important;
-        /* Aplica sombra com o valor `0 6px 18px rgba(190, 24, 93, 0.55) !important`. */
-        box-shadow: 0 6px 18px rgba(190, 24, 93, 0.55) !important;
-    }
-
-    /* Estado Dezena Variável (2º CLIQUE - AZUL ELÉTRICO) */
-    /* Seleciona `[class*="st-key-btn_ticket_"][class*="_variable"] button` para aplicar as regras visuais logo abaixo. */
-    [class*="st-key-btn_ticket_"][class*="_variable"] button {
-        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important`. */
-        background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
-        /* Define a cor do fundo com o valor `#2563eb !important`. */
-        background-color: #2563eb !important;
-        /* Define a borda e sua espessura com o valor `1.5px solid #1e40af !important`. */
-        border: 1.5px solid #1e40af !important;
-        /* Define a cor do texto com o valor `#ffffff !important`. */
-        color: #ffffff !important;
-        /* Aplica sombra com o valor `0 4px 14px rgba(37, 99, 235, 0.45) !important`. */
-        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45) !important;
-        /* Aplica uma transformacao visual com o valor `translateY(-1px) !important`. */
-        transform: translateY(-1px) !important;
-    }
-    /* Seleciona `[class*="st-key-btn_ticket_"][class*="_variable"] button:hover` para aplicar as regras visuais logo abaixo. */
-    [class*="st-key-btn_ticket_"][class*="_variable"] button:hover {
-        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%) !important`. */
-        background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%) !important;
-        /* Define a cor do fundo com o valor `#3b82f6 !important`. */
-        background-color: #3b82f6 !important;
-        /* Aplica sombra com o valor `0 6px 18px rgba(37, 99, 235, 0.55) !important`. */
-        box-shadow: 0 6px 18px rgba(37, 99, 235, 0.55) !important;
-    }
-
-    /* Estado Dezena Extra / Selecionada (VERDE ESMERALDA) */
-    /* Completa a regra visual CSS `[class*="st-key-btn_ticket_"][class*="_extra"] button,`. */
-    [class*="st-key-btn_ticket_"][class*="_extra"] button,
-    /* Completa a regra visual CSS `[class*="st-key-btn_sel_"][class*="_selected"] button,`. */
-    [class*="st-key-btn_sel_"][class*="_selected"] button,
-    /* Seleciona `[class*="st-key-btn_extra_"][class*="_selected"] button` para aplicar as regras visuais logo abaixo. */
-    [class*="st-key-btn_extra_"][class*="_selected"] button {
-        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #047857 0%, #10b981 100%) !important`. */
-        background: linear-gradient(135deg, #047857 0%, #10b981 100%) !important;
-        /* Define a cor do fundo com o valor `#10b981 !important`. */
-        background-color: #10b981 !important;
-        /* Define a borda e sua espessura com o valor `1.5px solid #047857 !important`. */
-        border: 1.5px solid #047857 !important;
-        /* Define a cor do texto com o valor `#ffffff !important`. */
-        color: #ffffff !important;
-        /* Aplica sombra com o valor `0 4px 14px rgba(16, 185, 129, 0.45) !important`. */
-        box-shadow: 0 4px 14px rgba(16, 185, 129, 0.45) !important;
-        /* Aplica uma transformacao visual com o valor `translateY(-1px) !important`. */
-        transform: translateY(-1px) !important;
-    }
-    /* Define a propriedade `[class*="st-key-btn_ticket_"][class*="_extra"] button` com o valor `hover,`. */
-    [class*="st-key-btn_ticket_"][class*="_extra"] button:hover,
-    /* Define a propriedade `[class*="st-key-btn_sel_"][class*="_selected"] button` com o valor `hover,`. */
-    [class*="st-key-btn_sel_"][class*="_selected"] button:hover,
-    /* Seleciona `[class*="st-key-btn_extra_"][class*="_selected"] button:hover` para aplicar as regras visuais logo abaixo. */
-    [class*="st-key-btn_extra_"][class*="_selected"] button:hover {
-        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #059669 0%, #34d399 100%) !important`. */
-        background: linear-gradient(135deg, #059669 0%, #34d399 100%) !important;
-        /* Define a cor do fundo com o valor `#059669 !important`. */
-        background-color: #059669 !important;
-        /* Aplica sombra com o valor `0 6px 18px rgba(16, 185, 129, 0.55) !important`. */
-        box-shadow: 0 6px 18px rgba(16, 185, 129, 0.55) !important;
-    }
-
-    /* Estilização dos Containers & Envoltórios de Borda */
-    /* Seleciona `div[data-testid="stVerticalBlockBorderWrapper"]` para aplicar as regras visuais logo abaixo. */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        /* Arredonda os cantos com o valor `16px !important`. */
-        border-radius: 16px !important;
-        /* Define a borda e sua espessura com o valor `1px solid #e2e8f0 !important`. */
-        border: 1px solid #e2e8f0 !important;
-        /* Aplica sombra com o valor `0 4px 20px rgba(0, 0, 0, 0.03) !important`. */
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03) !important;
-        /* Define o fundo ou preenchimento com o valor `#ffffff !important`. */
-        background: #ffffff !important;
-    }
-
-    /* Estilização de Botões de Ação Principais (Excluindo Volantes) */
-    /* Seleciona `div.stButton:not([class*="st-key-ticket_"]) button[kind="primary"]` para aplicar as regras visuais logo abaixo. */
-    div.stButton:not([class*="st-key-ticket_"]) button[kind="primary"] {
-        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #4c1d95 0%, #6d28d9 100%) !important`. */
-        background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 100%) !important;
-        /* Define a cor do fundo com o valor `#6d28d9 !important`. */
-        background-color: #6d28d9 !important;
-        /* Define a borda e sua espessura com o valor `none !important`. */
-        border: none !important;
-        /* Arredonda os cantos com o valor `12px !important`. */
-        border-radius: 12px !important;
-        /* Define a cor do texto com o valor `#ffffff !important`. */
-        color: #ffffff !important;
-        /* Define o peso da fonte com o valor `700 !important`. */
-        font-weight: 700 !important;
-        /* Define o tamanho do texto com o valor `1rem !important`. */
-        font-size: 1rem !important;
-        /* Define o espaco interno com o valor `0.6rem 1.2rem !important`. */
-        padding: 0.6rem 1.2rem !important;
-        /* Aplica sombra com o valor `0 4px 14px rgba(109, 40, 217, 0.35) !important`. */
-        box-shadow: 0 4px 14px rgba(109, 40, 217, 0.35) !important;
-        /* Suaviza as mudancas visuais com o valor `all 0.2s ease !important`. */
-        transition: all 0.2s ease !important;
-    }
-    /* Seleciona `div.stButton:not([class*="st-key-ticket_"]) button[kind="primary"]:hover` para aplicar as regras visuais logo abaixo. */
-    div.stButton:not([class*="st-key-ticket_"]) button[kind="primary"]:hover {
-        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%) !important`. */
-        background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%) !important;
-        /* Define a cor do fundo com o valor `#7c3aed !important`. */
-        background-color: #7c3aed !important;
-        /* Aplica sombra com o valor `0 6px 20px rgba(109, 40, 217, 0.5) !important`. */
-        box-shadow: 0 6px 20px rgba(109, 40, 217, 0.5) !important;
-        /* Aplica uma transformacao visual com o valor `translateY(-2px) !important`. */
-        transform: translateY(-2px) !important;
-    }
-
-    /* Download Buttons */
-    /* Seleciona `.stDownloadButton button` para aplicar as regras visuais logo abaixo. */
-    .stDownloadButton button {
-        /* Arredonda os cantos com o valor `12px !important`. */
-        border-radius: 12px !important;
-        /* Define o peso da fonte com o valor `700 !important`. */
-        font-weight: 700 !important;
-        /* Define a borda e sua espessura com o valor `1.5px solid #cbd5e1 !important`. */
-        border: 1.5px solid #cbd5e1 !important;
-        /* Suaviza as mudancas visuais com o valor `all 0.2s ease !important`. */
-        transition: all 0.2s ease !important;
-    }
-    /* Seleciona `.stDownloadButton button:hover` para aplicar as regras visuais logo abaixo. */
-    .stDownloadButton button:hover {
-        /* Define a cor da borda com o valor `#6d28d9 !important`. */
-        border-color: #6d28d9 !important;
-        /* Define a cor do texto com o valor `#6d28d9 !important`. */
-        color: #6d28d9 !important;
-        /* Define o fundo ou preenchimento com o valor `#f5f3ff !important`. */
-        background: #f5f3ff !important;
-        /* Aplica uma transformacao visual com o valor `translateY(-1px) !important`. */
-        transform: translateY(-1px) !important;
-    }
-
-    /* Navegação Segmentada (Radio Buttons Horizontal) */
-    /* Seleciona `div[data-testid="stRadio"] > div[role="radiogroup"]` para aplicar as regras visuais logo abaixo. */
-    div[data-testid="stRadio"] > div[role="radiogroup"] {
-        /* Define o fundo ou preenchimento com o valor `#f1f5f9`. */
-        background: #f1f5f9;
-        /* Define o espaco interno com o valor `5px`. */
-        padding: 5px;
-        /* Arredonda os cantos com o valor `16px`. */
-        border-radius: 16px;
-        /* Define o espaco entre itens com o valor `6px`. */
-        gap: 6px;
-        /* Define a borda e sua espessura com o valor `1px solid #e2e8f0`. */
-        border: 1px solid #e2e8f0;
-    }
-    /* Seleciona `div[data-testid="stRadio"] > div[role="radiogroup"] label` para aplicar as regras visuais logo abaixo. */
-    div[data-testid="stRadio"] > div[role="radiogroup"] label {
-        /* Define o fundo ou preenchimento com o valor `transparent`. */
-        background: transparent;
-        /* Define o espaco interno com o valor `8px 18px`. */
-        padding: 8px 18px;
-        /* Arredonda os cantos com o valor `12px`. */
-        border-radius: 12px;
-        /* Define o peso da fonte com o valor `700`. */
-        font-weight: 700;
-        /* Define o tamanho do texto com o valor `0.92rem`. */
-        font-size: 0.92rem;
-        /* Define a cor do texto com o valor `#64748b`. */
-        color: #64748b;
-        /* Suaviza as mudancas visuais com o valor `all 0.2s ease`. */
-        transition: all 0.2s ease;
-        /* Define a borda e sua espessura com o valor `none !important`. */
-        border: none !important;
-        /* Define a propriedade `cursor` com o valor `pointer`. */
-        cursor: pointer;
-    }
-    /* Seleciona `div[data-testid="stRadio"] > div[role="radiogroup"] label[data-checked="true"]` para aplicar as regras visuais logo abaixo. */
-    div[data-testid="stRadio"] > div[role="radiogroup"] label[data-checked="true"] {
-        /* Define o fundo ou preenchimento com o valor `#ffffff !important`. */
-        background: #ffffff !important;
-        /* Define a cor do texto com o valor `#4c1d95 !important`. */
-        color: #4c1d95 !important;
-        /* Aplica sombra com o valor `0 4px 12px rgba(0, 0, 0, 0.08) !important`. */
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
-    }
-
-    /* Métricas Reestilizadas */
-    /* Seleciona `div[data-testid="stMetric"]` para aplicar as regras visuais logo abaixo. */
-    div[data-testid="stMetric"] {
-        /* Define o fundo ou preenchimento com o valor `#ffffff`. */
-        background: #ffffff;
-        /* Define o espaco interno com o valor `1.1rem 1.3rem`. */
-        padding: 1.1rem 1.3rem;
-        /* Arredonda os cantos com o valor `16px`. */
-        border-radius: 16px;
-        /* Define a borda e sua espessura com o valor `1px solid #e2e8f0`. */
-        border: 1px solid #e2e8f0;
-        /* Aplica sombra com o valor `0 4px 12px rgba(0, 0, 0, 0.03)`. */
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
-    }
-    /* Seleciona `div[data-testid="stMetricLabel"]` para aplicar as regras visuais logo abaixo. */
-    div[data-testid="stMetricLabel"] {
-        /* Define o tamanho do texto com o valor `0.85rem !important`. */
-        font-size: 0.85rem !important;
-        /* Define o peso da fonte com o valor `700 !important`. */
-        font-weight: 700 !important;
-        /* Define a cor do texto com o valor `#64748b !important`. */
-        color: #64748b !important;
-        /* Transforma a apresentacao de maiusculas/minusculas com o valor `uppercase`. */
-        text-transform: uppercase;
-        /* Define o espacamento entre letras com o valor `0.04em`. */
-        letter-spacing: 0.04em;
-    }
-    /* Seleciona `div[data-testid="stMetricValue"]` para aplicar as regras visuais logo abaixo. */
-    div[data-testid="stMetricValue"] {
-        /* Escolhe a familia tipografica com o valor `'Outfit', sans-serif !important`. */
-        font-family: 'Outfit', sans-serif !important;
-        /* Define o tamanho do texto com o valor `1.8rem !important`. */
-        font-size: 1.8rem !important;
-        /* Define o peso da fonte com o valor `800 !important`. */
-        font-weight: 800 !important;
-        /* Define a cor do texto com o valor `#1e1b4b !important`. */
-        color: #1e1b4b !important;
-    }
-
-    /* Responsividade para Celulares e Tablets */
-    /* Restringe os estilos seguintes a telas estreitas, como celulares e tablets. */
-    @media (max-width: 768px) {
-        /* Seleciona `.hero-container` para aplicar as regras visuais logo abaixo. */
-        .hero-container {
-            /* Define o espaco interno com o valor `1.5rem 1.2rem`. */
-            padding: 1.5rem 1.2rem;
-            /* Define o espaco abaixo do componente com o valor `1.2rem`. */
-            margin-bottom: 1.2rem;
-        }
-        /* Seleciona `.hero-title` para aplicar as regras visuais logo abaixo. */
-        .hero-title {
-            /* Define o tamanho do texto com o valor `1.75rem`. */
-            font-size: 1.75rem;
-        }
-        /* Seleciona `.hero-subtitle` para aplicar as regras visuais logo abaixo. */
-        .hero-subtitle {
-            /* Define o tamanho do texto com o valor `0.88rem`. */
-            font-size: 0.88rem;
-        }
-        /* Seleciona `.ticket-body` para aplicar as regras visuais logo abaixo. */
-        .ticket-body {
-            /* Define o espaco interno com o valor `0.6rem`. */
-            padding: 0.6rem;
-        }
-        /* Seleciona `.ticket-header-title` para aplicar as regras visuais logo abaixo. */
-        .ticket-header-title {
-            /* Define o tamanho do texto com o valor `1.15rem`. */
-            font-size: 1.15rem;
-        }
-        /* Seleciona `[class*="st-key-ticket_"] button` para aplicar as regras visuais logo abaixo. */
-        [class*="st-key-ticket_"] button {
-            /* Define a altura com o valor `2.3rem !important`. */
-            height: 2.3rem !important;
-            /* Define a altura minima com o valor `2.3rem !important`. */
-            min-height: 2.3rem !important;
-            /* Define o tamanho do texto com o valor `0.88rem !important`. */
-            font-size: 0.88rem !important;
-            /* Arredonda os cantos com o valor `8px !important`. */
-            border-radius: 8px !important;
-        }
-        /* Seleciona `div[data-testid="stRadio"] > div[role="radiogroup"]` para aplicar as regras visuais logo abaixo. */
-        div[data-testid="stRadio"] > div[role="radiogroup"] {
-            /* Define a direcao dos itens flexiveis com o valor `column`. */
-            flex-direction: column;
-        }
-    }
-</style>
-"""
+# CSS_PATH aponta para a folha de estilos externa compartilhada pelo aplicativo.
+CSS_PATH = Path(__file__).parent / "static" / "styles.css"
+# MODERN_CSS le os estilos externos para injecao unica na interface principal.
+MODERN_CSS = f"<style>{CSS_PATH.read_text(encoding='utf-8')}</style>"
 
 
 # Extrai todas as sequencias numericas do texto e converte cada uma em inteiro.
@@ -698,10 +83,16 @@ def format_game(numbers: list[int]) -> str:
     return ",".join(f"{n:02d}" for n in numbers)
 
 
+# Remove um prefixo de identificacao como "Jogo 1:" antes de interpretar dezenas.
+def strip_game_label(line: str) -> str:
+    # Retira o rotulo inicial sem alterar numeros pertencentes ao jogo.
+    return re.sub(r"^\s*jogo\s+\d+\s*[:.)-]\s*", "", line.strip(), flags=re.IGNORECASE)
+
+
 # Interpreta uma linha como aposta e devolve dezenas unicas ordenadas, ou None se estiver vazia.
 def parse_game_line(line: str) -> list[int] | None:
-    # line recebe o valor que armazena em `line` o valor obtido de `line.strip()`.
-    line = line.strip()
+    # Limpa espacos e um eventual rotulo para evitar ler o indice como dezena.
+    line = strip_game_label(line)
     # Verifica se `not line`.
     if not line:
         # Devolve None ao codigo que chamou esta funcao.
@@ -712,6 +103,12 @@ def parse_game_line(line: str) -> list[int] | None:
     if not numbers:
         # Devolve None ao codigo que chamou esta funcao.
         return None
+    # Localiza valores fora do intervalo oficial da Lotofacil.
+    invalid_numbers = sorted({number for number in numbers if number not in ALL_NUMBERS})
+    # Rejeita a aposta para evitar conferir dezenas inexistentes silenciosamente.
+    if invalid_numbers:
+        # Interrompe a leitura informando as dezenas invalidas encontradas.
+        raise ValueError("Dezenas fora de 01 a 25: " + ", ".join(f"{number:02d}" for number in invalid_numbers))
     # Devolve sorted(set(numbers)) ao codigo que chamou esta funcao.
     return sorted(set(numbers))
 
@@ -777,10 +174,18 @@ def unique_in_selection_order(numbers: list[int]) -> list[int]:
 
 # Verifica se a aposta contem uma sequencia consecutiva do tamanho configurado.
 def has_consecutive_sequence(game: list[int], max_sequence: int) -> bool:
-    # Verifica se `max_sequence <= 1`.
-    if max_sequence <= 1:
-        # Devolve True ao codigo que chamou esta funcao.
+    # Uma aposta vazia nao contem sequencias, mesmo se o limite for zero ou um.
+    if not game:
+        # Devolve False para uma entrada sem dezenas.
+        return False
+    # Qualquer aposta nao vazia contem uma sequencia de tamanho um.
+    if max_sequence == 1:
+        # Devolve True porque uma dezena isolada satisfaz o limite unitario.
         return True
+    # Um limite nulo ou negativo nao representa um filtro de sequencias.
+    if max_sequence <= 0:
+        # Devolve False para indicar que nao ha uma sequencia a testar.
+        return False
     # game_sorted recebe o valor que normaliza os dados para a estrutura exigida pelo restante do fluxo.
     game_sorted = sorted(game)
     # consecutive recebe o valor que armazena em `consecutive` o valor obtido de `1`.
@@ -1049,6 +454,20 @@ def generate_ticket_combinations(
     if pick < 0 or pick > len(variables):
         # Interrompe o fluxo levantando o erro especificado para sinalizar uma condicao invalida.
         raise ValueError("A quantidade de dezenas variáveis por jogo é inválida.")
+    # Evita produzir apostas menores por repeticao entre dezenas fixas e variaveis.
+    if set(fixed) & set(variables):
+        # Interrompe a geracao quando as selecoes se sobrepoem.
+        raise ValueError("A mesma dezena não pode estar nas seleções fixa e variável.")
+    # Calcula o numero de apostas antes de alocar a lista completa.
+    combination_count = math.comb(len(variables), pick)
+    # Confirma que dezenas recebidas pela funcao pertencem ao volante oficial.
+    if any(number not in ALL_NUMBERS for number in fixed + variables):
+        # Impede jogos com valores ausentes no volante.
+        raise ValueError("As dezenas fixas e variáveis devem estar entre 01 e 25.")
+    # Impede que uma configuracao gere mais apostas do que o limite de seguranca.
+    if combination_count > MAX_GENERATED_GAMES:
+        # Interrompe a geracao com uma explicacao e o limite permitido.
+        raise ValueError(f"{combination_count:,} combinações excedem o limite de {MAX_GENERATED_GAMES:,}.".replace(",", "."))
     # Devolve [ ao codigo que chamou esta funcao.
     return [
         # Compoe a expressao ou os argumentos da operacao iniciada acima.
@@ -1161,18 +580,23 @@ def generate_file_c(
         # Interrompe o fluxo levantando o erro especificado para sinalizar uma condicao invalida.
         raise ValueError("O Arquivo C deve ter de 15 a 20 dezenas por aposta.")
 
+    # Limita o produto de arquivos antes de percorrer pares potencialmente enormes.
+    if len(games_a) * len(games_b) > MAX_GENERATED_GAMES:
+        # Informa que os arquivos de origem excedem o limite de processamento.
+        raise ValueError(f"A combinação dos Arquivos A e B excede o limite de {MAX_GENERATED_GAMES:,} pares.".replace(",", "."))
+
     # generated recebe o valor que monta a colecao de valores usada pela etapa atual.
     generated = []
     # seen recebe o valor que normaliza os dados para a estrutura exigida pelo restante do fluxo.
     seen = set()
+    # Precalcula as partes variaveis de A para nao repetir o processamento no laco interno.
+    cores_a = [variable_core(game, fixed_a) for game in games_a]
+    # Precalcula as partes variaveis de B antes de combinar pares de jogos.
+    cores_b = [variable_core(game, fixed_b) for game in games_b]
     # Percorre game_a in games_a e executa o bloco para cada item.
-    for game_a in games_a:
-        # core_a recebe o valor que armazena em `core_a` o valor obtido de `variable_core(game_a, fixed_a)`.
-        core_a = variable_core(game_a, fixed_a)
+    for core_a in cores_a:
         # Percorre game_b in games_b e executa o bloco para cada item.
-        for game_b in games_b:
-            # core_b recebe o valor que armazena em `core_b` o valor obtido de `variable_core(game_b, fixed_b)`.
-            core_b = variable_core(game_b, fixed_b)
+        for core_b in cores_b:
             # base recebe o valor que armazena em `base` o valor obtido de `unique_in_selection_order(core_a + core_b)`.
             base = unique_in_selection_order(core_a + core_b)
             # needed recebe o valor que armazena em `needed` o valor obtido de `target_size - len(base)`.
@@ -1183,21 +607,17 @@ def generate_file_c(
                 continue
             # candidates recebe o valor que monta a colecao de valores usada pela etapa atual.
             candidates = [number for number in extra_variables if number not in base]
-            # extra_picks recebe o valor que monta a colecao de valores usada pela etapa atual.
-            extra_picks = (
-                # Compoe a expressao ou os argumentos da operacao iniciada acima.
-                combinations(candidates, needed)
-                # Verifica se `needed <= len(candidates)`.
-                if needed <= len(candidates)
-                # Compoe a expressao ou os argumentos da operacao iniciada acima.
-                else [tuple(candidates)]
-            # Fecha o agrupamento da chamada ou colecao iniciada acima.
-            )
+            # Ignora este par se as dezenas extras nao conseguem completar o tamanho solicitado.
+            if needed > len(candidates):
+                # Avanca para o proximo par sem gerar uma aposta menor que o tamanho-alvo.
+                continue
+            # Monta somente selecoes que completam a quantidade configurada.
+            extra_picks = combinations(candidates, needed)
             # Percorre extra_pick in extra_picks e executa o bloco para cada item.
             for extra_pick in extra_picks:
-                # game recebe o valor que armazena em `game` o valor obtido de `base + list(extra_pick)`.
-                game = base + list(extra_pick)
-                # signature recebe o valor que armazena em `signature` o valor obtido de `tuple(game)`.
+                # Ordena a aposta para que jogos iguais tenham uma unica representacao.
+                game = sorted(base + list(extra_pick))
+                # Usa a aposta ordenada como chave de deduplicacao entre pares.
                 signature = tuple(game)
                 # Verifica se `signature not in seen`.
                 if signature not in seen:
@@ -1205,43 +625,52 @@ def generate_file_c(
                     seen.add(signature)
                     # Chama `generated.append` para executa a operacao do objeto com os argumentos indicados.
                     generated.append(game)
+                    # Interrompe cedo se a combinacao ultrapassar o limite de jogos configurado.
+                    if len(generated) > MAX_GENERATED_GAMES:
+                        # Informa o tamanho maximo permitido para o Arquivo C.
+                        raise ValueError(f"O Arquivo C excede o limite de {MAX_GENERATED_GAMES:,} jogos.".replace(",", "."))
     # Devolve generated ao codigo que chamou esta funcao.
     return generated
 
 
-# Prepara os jogos gerados e navega ao conferidor antes de renderizar seus widgets.
-def open_generated_games_in_checker() -> None:
-    """Callback executado antes dos widgets, permitindo trocar de aba com segurança."""
-    # generated_text recebe o valor que le ou atualiza o estado da sessao para preservar a selecao entre interacoes.
-    generated_text = st.session_state.get("generated_games_txt")
-    # Verifica se `not generated_text`.
-    if not generated_text:
-        # Compoe a expressao ou os argumentos da operacao iniciada acima.
-        st.session_state["checker_navigation_error"] = True
-        # Devolve o controle ao chamador sem valor ao codigo que chamou esta funcao.
+# Transfere texto ou uma colecao de jogos para o conferidor e seleciona sua tela.
+def send_games_to_checker(games: str | list[list[int]] | None, error_key: str = "checker_navigation_error") -> None:
+    # Converte jogos em linhas de texto ou mantem o texto recebido diretamente.
+    games_text = games if isinstance(games, str) else "\n".join(format_game(game) for game in games or [])
+    # Rejeita a navegacao se nao houver jogos para transferir.
+    if not games_text:
+        # Sinaliza ao modulo de origem que nenhum jogo estava disponivel.
+        st.session_state[error_key] = True
+        # Encerra a funcao antes de alterar o estado do conferidor.
         return
-    # Compoe a expressao ou os argumentos da operacao iniciada acima.
-    st.session_state["checker_games_text"] = generated_text
-    # Compoe a expressao ou os argumentos da operacao iniciada acima.
+    # Preenche o campo de texto do conferidor.
+    st.session_state["checker_games_text"] = games_text
+    # Seleciona o modo de entrada por texto.
     st.session_state["checker_input_method"] = "Colar texto"
-    # Compoe a expressao ou os argumentos da operacao iniciada acima.
+    # Abre a secao do conferidor.
     st.session_state["active_section"] = "Conferidor"
-    # Compoe a expressao ou os argumentos da operacao iniciada acima.
+    # Agenda a busca automatica de concursos recentes.
     st.session_state["auto_check_pending"] = True
+
+
+# Envia os jogos do gerador principal ao conferidor.
+def open_generated_games_in_checker() -> None:
+    # Recupera o texto produzido pelo gerador principal.
+    send_games_to_checker(st.session_state.get("generated_games_txt"))
 
 
 # Gera combinacoes a partir dos grupos selecionados na nova area.
 def generate_group_games() -> None:
-    # Define novamente as faixas para ler os valores mais recentes dos controles.
-    ranges = [range(1, 6), range(6, 11), range(11, 16), range(16, 21), range(21, 26)]
+    # Usa os intervalos padronizados definidos nas constantes do modulo.
+    ranges = GROUP_RANGES
     # Prepara os grupos com os estados atualizados das caixas e seletores.
     groups = []
     # Percorre cada faixa para montar os dados combinatorios atuais.
     for group_index, group_range in enumerate(ranges):
         # Recupera somente as dezenas marcadas na faixa atual.
-        selected = [number for number in group_range if st.session_state.get(f"group_number_{number}", number != 3)]
+        selected = [number for number in group_range if st.session_state.get(f"group_number_{number}", number in GROUP_DEFAULT_SELECTED_NUMBERS)]
         # Recupera quantas dezenas devem ser escolhidas nesta faixa.
-        pick = int(st.session_state.get(f"group_pick_{group_index}", [1, 4, 3, 4, 3][group_index]))
+        pick = int(st.session_state.get(f"group_pick_{group_index}", GROUP_DEFAULT_PICKS[group_index]))
         # Inclui a faixa quando existe quantidade positiva para selecionar.
         if selected and pick:
             # Guarda as dezenas e sua quantidade escolhida.
@@ -1254,8 +683,24 @@ def generate_group_games() -> None:
     if not groups or not 15 <= numbers_per_game <= 20:
         st.session_state["group_generation_error"] = "Configure entre 15 e 20 dezenas por jogo antes de gerar."
         return
+    # Calcula o total esperado antes de construir os jogos.
+    total_games = expected_combination_count(groups)
+    # Impede a geracao acima do limite antes de alocar memoria.
+    if total_games > MAX_GENERATED_GAMES:
+        # Deixa uma mensagem para a interface mostrar ao usuario.
+        st.session_state["group_generation_error"] = f"{total_games:,} combinações excedem o limite de {MAX_GENERATED_GAMES:,}.".replace(",", ".")
+        # Encerra sem materializar uma lista grande.
+        return
     # Gera o produto de combinacoes de todos os grupos.
-    games = generate_combinations([], groups)
+    try:
+        # Produz as apostas com deteccao de sobreposicoes e limite global.
+        games = generate_combinations([], groups)
+    # Converte erros de configuracao em mensagens visiveis no modulo.
+    except ValueError as exc:
+        # Preserva a explicacao gerada pela rotina de combinacoes.
+        st.session_state["group_generation_error"] = str(exc)
+        # Encerra sem substituir os jogos anteriores.
+        return
     # Armazena os jogos para exibicao e para os botoes de encaminhamento.
     st.session_state["group_generated_games"] = games
     # Armazena os jogos em linhas de texto para os outros modulos.
@@ -1264,20 +709,8 @@ def generate_group_games() -> None:
 
 # Leva os jogos deste modulo ao conferidor.
 def open_group_games_in_checker() -> None:
-    # Recupera as apostas que foram geradas neste modulo.
-    games_text = st.session_state.get("group_generated_games_txt", "")
-    # Informa a interface se ainda nao existem apostas para encaminhar.
-    if not games_text:
-        st.session_state["group_generation_error"] = "Gere as combinacoes antes de abrir o conferidor."
-        return
-    # Coloca o texto no campo de entrada do conferidor.
-    st.session_state["checker_games_text"] = games_text
-    # Seleciona a entrada por texto no conferidor.
-    st.session_state["checker_input_method"] = "Colar texto"
-    # Abre a secao do conferidor.
-    st.session_state["active_section"] = "Conferidor"
-    # Solicita a conferencia automatica dos jogos recebidos.
-    st.session_state["auto_check_pending"] = True
+    # Envia o texto do modulo de grupos usando a rotina compartilhada.
+    send_games_to_checker(st.session_state.get("group_generated_games_txt"), "group_generation_error")
 
 
 # Leva os jogos deste modulo ao impressor de volantes.
@@ -1298,20 +731,8 @@ def open_group_games_in_printer() -> None:
 def open_intersection_c_in_checker() -> None:
     # games recebe o valor que le ou atualiza o estado da sessao para preservar a selecao entre interacoes.
     games = st.session_state.get("intersection_c_games", [])
-    # Verifica se `not games`.
-    if not games:
-        # Compoe a expressao ou os argumentos da operacao iniciada acima.
-        st.session_state["checker_navigation_error"] = True
-        # Devolve o controle ao chamador sem valor ao codigo que chamou esta funcao.
-        return
-    # Chama `st.session_state["checker_games_text"] = "\n".join` para executa a operacao do objeto com os argumentos indicados.
-    st.session_state["checker_games_text"] = "\n".join(format_game(game) for game in games)
-    # Compoe a expressao ou os argumentos da operacao iniciada acima.
-    st.session_state["checker_input_method"] = "Colar texto"
-    # Compoe a expressao ou os argumentos da operacao iniciada acima.
-    st.session_state["active_section"] = "Conferidor"
-    # Compoe a expressao ou os argumentos da operacao iniciada acima.
-    st.session_state["auto_check_pending"] = True
+    # Transfere os jogos de C para o conferidor.
+    send_games_to_checker(games)
 
 
 # Cria o callback que transfere um Arquivo A ou B para o conferidor.
@@ -1323,20 +744,8 @@ def make_open_intersection_ab_in_checker(letter: str):
         key = f"intersection_{letter.lower()}_games"
         # games recebe o valor que le ou atualiza o estado da sessao para preservar a selecao entre interacoes.
         games = st.session_state.get(key, [])
-        # Verifica se `not games`.
-        if not games:
-            # Compoe a expressao ou os argumentos da operacao iniciada acima.
-            st.session_state["checker_navigation_error"] = True
-            # Devolve o controle ao chamador sem valor ao codigo que chamou esta funcao.
-            return
-        # Chama `st.session_state["checker_games_text"] = "\n".join` para executa a operacao do objeto com os argumentos indicados.
-        st.session_state["checker_games_text"] = "\n".join(format_game(game) for game in games)
-        # Compoe a expressao ou os argumentos da operacao iniciada acima.
-        st.session_state["checker_input_method"] = "Colar texto"
-        # Compoe a expressao ou os argumentos da operacao iniciada acima.
-        st.session_state["active_section"] = "Conferidor"
-        # Compoe a expressao ou os argumentos da operacao iniciada acima.
-        st.session_state["auto_check_pending"] = True
+        # Transfere os jogos de A ou B usando a funcao comum de navegacao.
+        send_games_to_checker(games)
     # Devolve _callback ao codigo que chamou esta funcao.
     return _callback
 
@@ -1350,10 +759,34 @@ def generate_combinations(
     # fixed_unique recebe o valor que armazena em `fixed_unique` o valor obtido de `unique_in_selection_order(fixed)`.
     fixed_unique = unique_in_selection_order(fixed)
 
+    # Rejeita dezenas fixas que nao existem no volante antes de calcular combinacoes.
+    if any(number not in ALL_NUMBERS for number in fixed_unique):
+        # Informa os limites validos aceitos pelo gerador.
+        raise ValueError("As dezenas fixas devem estar entre 01 e 25.")
+
+    # Confirma que todas as dezenas de cada grupo pertencem ao volante oficial.
+    if any(number not in ALL_NUMBERS for numbers, _ in groups for number in numbers):
+        # Impede que uma combinacao contenha dezenas fora da cartela.
+        raise ValueError("As dezenas dos grupos devem estar entre 01 e 25.")
+
+    # Rejeita dezenas repetidas entre faixas para evitar jogos menores ou duplicados.
+    overlap_warnings = find_overlap_warnings(fixed_unique, groups)
+    # Interrompe a geracao quando as faixas produzem sobreposicoes.
+    if overlap_warnings:
+        # Mostra o primeiro conflito encontrado entre selecoes.
+        raise ValueError(overlap_warnings[0])
+
     # Verifica se `not groups`.
     if not groups:
         # Devolve [fixed_unique] if fixed_unique else [] ao codigo que chamou esta funcao.
         return [fixed_unique] if fixed_unique else []
+
+    # Calcula quantas combinacoes serao criadas antes de materializa-las.
+    combination_count = expected_combination_count(groups)
+    # Protege a memoria contra configuracoes que gerem listas excessivamente grandes.
+    if combination_count > MAX_GENERATED_GAMES:
+        # Interrompe a operacao com o total previsto e o limite aplicado.
+        raise ValueError(f"{combination_count:,} combinações excedem o limite de {MAX_GENERATED_GAMES:,}.".replace(",", "."))
 
     # group_combos recebe o valor que monta a colecao de valores usada pela etapa atual.
     group_combos = []
@@ -1458,45 +891,76 @@ def find_overlap_warnings(fixed: list[int], groups: list[tuple[list[int], int]])
 
 # Converte o formato oficial da CAIXA para os campos usados pelo conferidor.
 def normalize_caixa_result(payload: dict) -> dict:
+    # Confirma que o endpoint respondeu com um objeto JSON.
+    if not isinstance(payload, dict):
+        # Sinaliza um formato externo que o aplicativo nao consegue interpretar.
+        raise ValueError("A API da CAIXA retornou uma resposta em formato inesperado.")
+    # Verifica todos os campos oficiais necessarios para conferir um concurso.
+    required_fields = {"numero", "dataApuracao", "listaDezenas", "listaRateioPremio"}
+    # Calcula quais campos obrigatorios faltaram na resposta.
+    missing_fields = required_fields - payload.keys()
+    # Reporta mudancas no esquema da API sem derrubar a tela do conferidor.
+    if missing_fields:
+        # Informa quais campos estao ausentes para facilitar diagnostico.
+        raise ValueError("A resposta da CAIXA nao contem os campos esperados: " + ", ".join(sorted(missing_fields)))
+    # Valida que dezenas e faixas de premio vieram como listas.
+    if not isinstance(payload["listaDezenas"], list) or not isinstance(payload["listaRateioPremio"], list):
+        # Evita continuar com dados que nao podem ser iterados com seguranca.
+        raise ValueError("A API da CAIXA retornou dezenas ou faixas em formato inesperado.")
     # Converte as faixas oficiais em uma lista simples de premiacoes.
-    prizes = [
-        # Mantem descricao e valor unitario para o calculo de premios existente.
-        {"descricao": item["descricaoFaixa"], "valorPremio": item["valorPremio"]}
-        # Percorre cada faixa de premio enviada pela CAIXA.
-        for item in payload.get("listaRateioPremio", [])
-    # Fecha a lista de faixas normalizadas.
-    ]
+    prizes = []
+    # Percorre cada faixa oficial de premios do concurso.
+    for item in payload["listaRateioPremio"]:
+        # Garante que cada faixa tenha texto descritivo e valor de premio.
+        if not isinstance(item, dict) or "descricaoFaixa" not in item or "valorPremio" not in item:
+            # Informa que a API alterou o conteudo de uma faixa de premio.
+            raise ValueError("A API da CAIXA retornou uma faixa de premio em formato inesperado.")
+        # Preserva descricao, premio e numero da faixa para compatibilidade futura.
+        prizes.append({"descricao": item["descricaoFaixa"], "valorPremio": item["valorPremio"], "faixa": item.get("faixa")})
     # Devolve o concurso no modelo interno que o restante do conferidor espera.
-    return {
-        # Mapeia o numero oficial do concurso para o campo interno.
-        "concurso": payload["numero"],
-        # Mapeia a data oficial para o campo interno.
-        "data": payload["dataApuracao"],
-        # Mapeia a lista oficial de dezenas sorteadas.
-        "dezenas": payload["listaDezenas"],
-        # Mapeia as faixas oficiais de premio.
-        "premiacoes": prizes,
-    }
+    return {"concurso": payload["numero"], "data": payload["dataApuracao"], "dezenas": payload["listaDezenas"], "premiacoes": prizes}
 
 
+# Devolve uma sessao HTTP com retry, isolada para a thread atual.
+def get_api_session() -> requests.Session:
+    # Recupera a conexao local da thread ou cria uma nova quando necessario.
+    session = getattr(API_THREAD_LOCAL, "session", None)
+    # Cria uma sessao independente para a thread que esta fazendo a consulta.
+    if session is None:
+        # Inicializa o cliente HTTP persistente desta thread.
+        session = requests.Session()
+        # Define cabecalhos compartilhados pelas consultas a API oficial.
+        session.headers.update({"Accept": "application/json, text/plain, */*", "User-Agent": "Mozilla/5.0 LotofacilApp/1.0"})
+        # Configura repeticoes limitadas para erros de conexao e respostas temporarias.
+        retry = Retry(total=3, connect=3, read=2, status=2, backoff_factor=0.3, status_forcelist=(429, 500, 502, 503, 504), allowed_methods=frozenset({"GET"}))
+        # Cria um adaptador HTTPS que aplica a politica de retry.
+        adapter = HTTPAdapter(max_retries=retry)
+        # Instala o adaptador para requisicoes seguras.
+        session.mount("https://", adapter)
+        # Associa a sessao a thread para reutilizar conexao sem compartilha-la entre threads.
+        API_THREAD_LOCAL.session = session
+    # Devolve a sessao persistente da thread atual.
+    return session
+
+
+# Cacheia por cinco minutos o resultado que pode mudar apos um novo sorteio.
+@st.cache_data(ttl=300, show_spinner=False)
 # Busca na API o resultado mais recente da Lotofacil.
 def fetch_latest_result() -> dict:
-    # Define cabecalhos para identificar uma solicitacao web comum ao endpoint da CAIXA.
-    headers = {"Accept": "application/json, text/plain, */*", "User-Agent": "Mozilla/5.0 LotofacilApp/1.0"}
     # Consulta o endpoint oficial com limite de tempo para evitar espera indefinida.
-    response = requests.get(API_URL, headers=headers, timeout=15)
+    response = get_api_session().get(API_URL, timeout=(5, 15))
     # Chama `response.raise_for_status` para interrompe a consulta quando a API retorna erro HTTP.
     response.raise_for_status()
     # Converte a resposta oficial para os campos esperados pelo aplicativo.
     return normalize_caixa_result(response.json())
 
 
+# Cacheia indefinidamente resultados de concursos anteriores, que nao se alteram.
+@st.cache_data(ttl=None, show_spinner=False)
 # Busca na API o resultado do concurso solicitado.
 def fetch_contest_result(contest: int) -> dict:
-    # Define cabecalhos para identificar uma solicitacao web comum ao endpoint da CAIXA.
-    headers = {"Accept": "application/json, text/plain, */*", "User-Agent": "Mozilla/5.0 LotofacilApp/1.0"}
     # Consulta o concurso solicitado diretamente na API oficial.
-    response = requests.get(API_CONTEST_URL.format(contest=contest), headers=headers, timeout=15)
+    response = get_api_session().get(API_CONTEST_URL.format(contest=contest), timeout=(5, 15))
     # Chama `response.raise_for_status` para interrompe a consulta quando a API retorna erro HTTP.
     response.raise_for_status()
     # Converte a resposta oficial para os campos esperados pelo aplicativo.
@@ -1509,34 +973,31 @@ def result_date(result: dict) -> date:
     return datetime.strptime(result["data"], "%d/%m/%Y").date()
 
 
+# Busca um conjunto de concursos em paralelo respeitando o cache individual.
+def fetch_contests_parallel(contests: list[int]) -> list[dict]:
+    # Cria um grupo limitado de workers para reduzir o tempo das consultas historicas.
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        # Mantem a ordem dos concursos informados ao coletar as respostas.
+        return list(executor.map(fetch_contest_result, contests))
+
+
 # Percorre concursos anteriores e devolve os resultados dentro do intervalo de datas.
 def fetch_results_for_dates(start: date, end: date) -> list[dict]:
     # latest recebe o valor que armazena em `latest` o valor obtido de `fetch_latest_result()`.
     latest = fetch_latest_result()
-    # current recebe o valor que armazena em `current` o valor obtido de `latest`.
-    current = latest
-    # results recebe o valor que monta a colecao de valores usada pela etapa atual.
-    results = []
-
-    # Repete o bloco enquanto `result_date(current) >= start`.
-    while result_date(current) >= start:
-        # drawn_date recebe o valor que armazena em `drawn_date` o valor obtido de `result_date(current)`.
-        drawn_date = result_date(current)
-        # Verifica se `drawn_date <= end`.
-        if drawn_date <= end:
-            # Chama `results.append` para executa a operacao do objeto com os argumentos indicados.
-            results.append(current)
-
-        # previous_contest recebe o valor que armazena em `previous_contest` o valor obtido de `int(current["concurso"]) - 1`.
-        previous_contest = int(current["concurso"]) - 1
-        # Verifica se `previous_contest < 1`.
-        if previous_contest < 1:
-            # Encerra o laco atual assim que a condicao de saida foi satisfeita.
-            break
-        # current recebe o valor que armazena em `current` o valor obtido de `fetch_contest_result(previous_contest)`.
-        current = fetch_contest_result(previous_contest)
-
-    # Devolve sorted(results, key=lambda item: int(item["concurso"])) ao codigo que chamou esta funcao.
+    # Calcula quantos dias de historico precisam ser consultados ate a data inicial.
+    calendar_days_back = max(0, (result_date(latest) - start).days) + 14
+    # Converte a quantidade de dias em um limite conservador de concursos anteriores.
+    latest_contest = int(latest["concurso"])
+    # Cria os numeros de concurso necessarios sem consultar valores menores que um.
+    contest_numbers = list(range(latest_contest - 1, max(0, latest_contest - calendar_days_back), -1))
+    # Consulta o historico solicitado com concorrencia limitada e cache por concurso.
+    previous_results = fetch_contests_parallel(contest_numbers)
+    # Combina o ultimo concurso e o historico obtido em paralelo.
+    results = [latest, *previous_results]
+    # Retem apenas concursos dentro do intervalo escolhido pelo usuario.
+    results = [item for item in results if start <= result_date(item) <= end]
+    # Devolve os concursos em ordem cronologica crescente.
     return sorted(results, key=lambda item: int(item["concurso"]))
 
 
@@ -1544,17 +1005,15 @@ def fetch_results_for_dates(start: date, end: date) -> list[dict]:
 def fetch_recent_results(count: int = 10) -> list[dict]:
     # latest recebe o valor que armazena em `latest` o valor obtido de `fetch_latest_result()`.
     latest = fetch_latest_result()
-    # results recebe o valor que monta a colecao de valores usada pela etapa atual.
-    results = [latest]
-    # Percorre contest in range(int(latest["concurso"]) - 1, int(latest["concurso"]) - count, -1) e executa o bloco para cada item.
-    for contest in range(int(latest["concurso"]) - 1, int(latest["concurso"]) - count, -1):
-        # Verifica se `contest < 1`.
-        if contest < 1:
-            # Encerra o laco atual assim que a condicao de saida foi satisfeita.
-            break
-        # Chama `results.append` para executa a operacao do objeto com os argumentos indicados.
-        results.append(fetch_contest_result(contest))
-    # Devolve sorted(results, key=lambda item: int(item["concurso"]), reverse=True) ao codigo que chamou esta funcao.
+    # Le o numero mais recente para definir a faixa de concursos a consultar.
+    latest_contest = int(latest["concurso"])
+    # Define os concursos anteriores sem ultrapassar o inicio do historico.
+    contest_numbers = list(range(latest_contest - 1, max(0, latest_contest - max(count, 1)), -1))
+    # Consulta concursos anteriores em paralelo, usando o cache persistente.
+    previous_results = fetch_contests_parallel(contest_numbers)
+    # Combina o resultado mais recente com os anteriores.
+    results = [latest, *previous_results]
+    # Devolve os concursos mais recentes primeiro.
     return sorted(results, key=lambda item: int(item["concurso"]), reverse=True)
 
 
@@ -1588,14 +1047,24 @@ def prize_units(game_size: int, hits: int) -> dict[int, int]:
 
 # Organiza os valores de premio da resposta da API por quantidade de acertos.
 def prizes_by_points(result: dict) -> dict[int, float]:
-    # Devolve { ao codigo que chamou esta funcao.
-    return {
-        # Compoe a expressao ou os argumentos da operacao iniciada acima.
-        int(item["descricao"].split()[0]): float(item["valorPremio"])
-        # Percorre item in result.get("premiacoes", []) e executa o bloco para cada item.
-        for item in result.get("premiacoes", [])
-    # Fecha o agrupamento da chamada ou colecao iniciada acima.
-    }
+    # Cria o mapeamento que sera preenchido com as faixas interpretadas.
+    prizes = {}
+    # Percorre as faixas sem assumir que a descricao sempre comeca com um numero.
+    for item in result.get("premiacoes", []):
+        # Le uma descricao vazia quando a API nao envia texto para a faixa.
+        description = str(item.get("descricao", ""))
+        # Procura explicitamente o numero de acertos no texto da faixa.
+        match = re.search(r"\b(1[1-5])\b", description)
+        # Recupera o identificador numerico oficial quando a descricao mudou.
+        points = int(match.group(1)) if match else 16 - int(item["faixa"]) if item.get("faixa") in {1, 2, 3, 4, 5} else None
+        # Ignora faixas que nao possam ser associadas a 11 a 15 acertos.
+        if points not in range(11, 16):
+            # Continua a leitura das demais faixas validas.
+            continue
+        # Armazena o premio unitario da faixa identificada.
+        prizes[points] = float(item.get("valorPremio", 0) or 0)
+    # Devolve os premios organizados por quantidade de acertos.
+    return prizes
 
 
 # Formata um valor numerico como moeda brasileira.
@@ -1649,6 +1118,10 @@ VOLANTE_SIZE_MARK_HEIGHT = 12
 # Carrega o recorte escaneado e o serializa como imagem JPEG para o PDF.
 def load_volante_template() -> bytes:
     """Carrega o recorte em pé do volante obtido do scanner A4."""
+    # Interrompe com uma mensagem direta se o arquivo de imagem nao estiver instalado.
+    if not VOLANTE_SOURCE_PATH.is_file():
+        # Informa o caminho esperado para restaurar o recurso ausente.
+        raise FileNotFoundError(f"Imagem do volante nao encontrada: {VOLANTE_SOURCE_PATH}")
     # template recebe o valor que armazena em `template` o valor obtido de `Image.open(VOLANTE_SOURCE_PATH).convert("RGB")`.
     template = Image.open(VOLANTE_SOURCE_PATH).convert("RGB")
     # Verifica se `template.size != VOLANTE_IMAGE_SIZE`.
@@ -1729,6 +1202,18 @@ def volante_size_mark_position(game_size: int) -> tuple[float, float, float, flo
     )
 
 
+# Desenha uma casa do volante usando origem superior, escala e deslocamentos comuns.
+def draw_volante_mark(pdf, rect: tuple[float, float, float, float], scale_x: float, scale_y: float, origin_x: float = 0.0, origin_top: float = VOLANTE_PRINT_HEIGHT, offset_x: float = 0.0, offset_y: float = 0.0) -> None:
+    # Separa posicao e dimensoes da casa medidas no recorte original.
+    mark_x, mark_y, mark_width, mark_height = rect
+    # Converte x da origem superior esquerda para coordenada PDF.
+    x = origin_x + mark_x * scale_x + offset_x
+    # Converte y medido do topo para coordenada inferior usada pelo PDF.
+    y = origin_top - (mark_y + mark_height) * scale_y + offset_y
+    # Desenha somente o retangulo preto preenchido sem contorno.
+    pdf.rect(x, y, mark_width * scale_x, mark_height * scale_y, fill=1, stroke=0)
+
+
 # Gera paginas A4 com os jogos marcados e linhas alinhadas para corte.
 def build_games_pdf(games: list[list[int]]) -> bytes:
     """Cria A4 retrato com grade fixa de quatro volantes em escala real."""
@@ -1789,44 +1274,12 @@ def build_games_pdf(games: list[list[int]]) -> bytes:
                 pdf.setFillColorRGB(0, 0, 0)
                 # Percorre number in set(game) e executa o bloco para cada item.
                 for number in set(game):
-                    # mark_x, mark_y, mark_width, mark_height recebe o valor que armazena em `mark_x` o valor obtido de `volante_mark_position(board_index, number)`.
-                    mark_x, mark_y, mark_width, mark_height = volante_mark_position(board_index, number)
-                    # Chama `pdf.rect` para desenha o preenchimento de uma dezena ou opcao no PDF.
-                    pdf.rect(
-                        # Continua a expressao composta iniciada acima com este operando.
-                        card_left + mark_x * scale_x,
-                        # Continua a expressao composta iniciada acima com este operando.
-                        card_bottom + VOLANTE_PRINT_HEIGHT - (mark_y + mark_height) * scale_y,
-                        # Continua a expressao composta iniciada acima com este operando.
-                        mark_width * scale_x,
-                        # Continua a expressao composta iniciada acima com este operando.
-                        mark_height * scale_y,
-                        # fill recebe o valor que armazena em `fill` o valor obtido de `1,`.
-                        fill=1,
-                        # stroke recebe o valor que armazena em `stroke` o valor obtido de `0,`.
-                        stroke=0,
-                    # Fecha o agrupamento da chamada ou colecao iniciada acima.
-                    )
+                    # Desenha a dezena na pagina considerando a origem da cartela atual.
+                    draw_volante_mark(pdf, volante_mark_position(board_index, number), scale_x, scale_y, card_left, card_bottom + VOLANTE_PRINT_HEIGHT)
             # Verifica se `game_size in BET_PRICES`.
             if game_size in BET_PRICES:
-                # size_x, size_y, size_width, size_height recebe o valor que armazena em `size_x` o valor obtido de `volante_size_mark_position(game_size)`.
-                size_x, size_y, size_width, size_height = volante_size_mark_position(game_size)
-                # Chama `pdf.rect` para desenha o preenchimento de uma dezena ou opcao no PDF.
-                pdf.rect(
-                    # Continua a expressao composta iniciada acima com este operando.
-                    card_left + size_x * scale_x,
-                    # Continua a expressao composta iniciada acima com este operando.
-                    card_bottom + VOLANTE_PRINT_HEIGHT - (size_y + size_height) * scale_y,
-                    # Continua a expressao composta iniciada acima com este operando.
-                    size_width * scale_x,
-                    # Continua a expressao composta iniciada acima com este operando.
-                    size_height * scale_y,
-                    # fill recebe o valor que armazena em `fill` o valor obtido de `1,`.
-                    fill=1,
-                    # stroke recebe o valor que armazena em `stroke` o valor obtido de `0,`.
-                    stroke=0,
-                # Fecha o agrupamento da chamada ou colecao iniciada acima.
-                )
+                # Desenha a quantidade de dezenas na mesma cartela do A4.
+                draw_volante_mark(pdf, volante_size_mark_position(game_size), scale_x, scale_y, card_left, card_bottom + VOLANTE_PRINT_HEIGHT)
 
         # Contorno compartilhado das quatro cartelas e linhas fixas para corte em pilha.
         # Chama `pdf.saveState` para executa a operacao do objeto com os argumentos indicados.
@@ -1884,16 +1337,12 @@ def build_direct_print_pdf(games: list[list[int]], offset_x_mm: float = 0.0, off
         for board_index, game in enumerate(card_games):
             # Percorre cada dezena do jogo sem repetir marcacoes.
             for number in set(game):
-                # Calcula a posicao da dezena nas coordenadas da imagem de referencia.
-                mark_x, mark_y, mark_width, mark_height = volante_mark_position(board_index, number)
                 # Desenha o quadrado preto da dezena na escala da cartela fisica.
-                pdf.rect(mark_x * scale_x + offset_x, VOLANTE_PRINT_HEIGHT - (mark_y + mark_height) * scale_y + offset_y, mark_width * scale_x, mark_height * scale_y, fill=1, stroke=0)
+                draw_volante_mark(pdf, volante_mark_position(board_index, number), scale_x, scale_y, offset_x=offset_x, offset_y=offset_y)
         # Verifica que o tamanho selecionado corresponde a uma opcao permitida.
         if game_size in BET_PRICES:
-            # Calcula a posicao da marcacao da quantidade de dezenas.
-            size_x, size_y, size_width, size_height = volante_size_mark_position(game_size)
             # Desenha a marcacao preta de 15 a 20 dezenas.
-            pdf.rect(size_x * scale_x + offset_x, VOLANTE_PRINT_HEIGHT - (size_y + size_height) * scale_y + offset_y, size_width * scale_x, size_height * scale_y, fill=1, stroke=0)
+            draw_volante_mark(pdf, volante_size_mark_position(game_size), scale_x, scale_y, offset_x=offset_x, offset_y=offset_y)
         # Finaliza a pagina da cartela para que a impressora avance ao proximo volante.
         pdf.showPage()
     # Grava o documento PDF no buffer.
@@ -1920,14 +1369,10 @@ def build_calibration_pdf(offset_x_mm: float = 0.0, offset_y_mm: float = 0.0) ->
     pdf.setFillColorRGB(0, 0, 0)
     # Usa quatro dezenas nos extremos e uma no centro para conferir alinhamento.
     for number in (1, 5, 13, 21, 25):
-        # Calcula a casa da dezena de referencia na primeira linha de jogo.
-        mark_x, mark_y, mark_width, mark_height = volante_mark_position(0, number)
-        # Imprime o quadrado de referencia na escala e deslocamento configurados.
-        pdf.rect(mark_x * scale_x + offset_x, VOLANTE_PRINT_HEIGHT - (mark_y + mark_height) * scale_y + offset_y, mark_width * scale_x, mark_height * scale_y, fill=1, stroke=0)
-    # Recupera o retangulo de selecao da aposta de quinze dezenas.
-    size_x, size_y, size_width, size_height = volante_size_mark_position(15)
+        # Imprime a casa de referencia na escala e deslocamento configurados.
+        draw_volante_mark(pdf, volante_mark_position(0, number), scale_x, scale_y, offset_x=offset_x, offset_y=offset_y)
     # Marca a opcao de quinze dezenas como referencia para alinhamento.
-    pdf.rect(size_x * scale_x + offset_x, VOLANTE_PRINT_HEIGHT - (size_y + size_height) * scale_y + offset_y, size_width * scale_x, size_height * scale_y, fill=1, stroke=0)
+    draw_volante_mark(pdf, volante_size_mark_position(15), scale_x, scale_y, offset_x=offset_x, offset_y=offset_y)
     # Define uma cor cinza escura para a regua que verifica a escala de impressao.
     pdf.setStrokeColorRGB(0.25, 0.25, 0.25)
     # Define a espessura da regua em pontos PDF.
@@ -1957,16 +1402,14 @@ def build_calibration_pdf(offset_x_mm: float = 0.0, offset_y_mm: float = 0.0) ->
 
 # Renderiza o modulo de geracao por grupos configuraveis.
 def render_group_generator() -> None:
-    # Aplica a folha de estilos compartilhada pelo aplicativo.
-    st.markdown(MODERN_CSS, unsafe_allow_html=True)
     # Identifica a funcao desta area.
     st.subheader("Gerador por Grupos")
     # Explica como as cores da planilha sao representadas neste modulo.
     st.caption("Selecione as dezenas que participam de cada grupo e quantas entram em cada jogo.")
-    # Define os cinco intervalos de dezenas da planilha.
-    ranges = [range(1, 6), range(6, 11), range(11, 16), range(16, 21), range(21, 26)]
-    # Define as quantidades iniciais de dezenas por grupo conforme a planilha.
-    default_picks = [1, 4, 3, 4, 3]
+    # Usa os cinco intervalos de dezenas definidos nas constantes do modulo.
+    ranges = GROUP_RANGES
+    # Usa as quantidades iniciais definidas nas constantes do modulo.
+    default_picks = GROUP_DEFAULT_PICKS
     # Cria cinco colunas para exibir os grupos lado a lado.
     group_columns = st.columns(5)
     # Inicia a configuracao que sera usada pela geracao de combinacoes.
@@ -1980,7 +1423,7 @@ def render_group_generator() -> None:
         # Adiciona por padrao somente a dezena 3 no primeiro grupo e todas nas demais faixas.
         for number in group_range:
             # Define se a dezena deve iniciar selecionada.
-            default_selected = number == 3 if group_index == 0 else True
+            default_selected = number in GROUP_DEFAULT_SELECTED_NUMBERS
             # Cria uma caixa de selecao para a dezena.
             if group_column.checkbox(f"{number:02d}", value=default_selected, key=f"group_number_{number}"):
                 # Guarda a dezena marcada para formar as combinacoes.
@@ -2003,6 +1446,16 @@ def render_group_generator() -> None:
     total_numbers = sum(pick for _, pick in configured_groups)
     # Apresenta a quantidade total de dezenas por aposta.
     st.metric("Dezenas por jogo", total_numbers)
+    # Calcula a quantidade de combinacoes que a configuracao atual produziria.
+    total_combinations = expected_combination_count(configured_groups)
+    # Mostra a previsao para o usuario antes de iniciar a geracao.
+    st.metric("Combinações previstas", f"{total_combinations:,}".replace(",", "."))
+    # Identifica configuracoes que ultrapassam o limite de geracao em memoria.
+    exceeds_limit = total_combinations > MAX_GENERATED_GAMES
+    # Explica o limite antes de o usuario acionar o botao.
+    if exceeds_limit:
+        # Informa o total estimado e o limite aceito.
+        st.warning(f"A configuração excede o limite de {MAX_GENERATED_GAMES:,} combinações.".replace(",", "."))
     # Valida o total exigido pelas regras da Lotofacil.
     if total_numbers and not 15 <= total_numbers <= 20:
         # Orienta o usuario a ajustar as quantidades.
@@ -2010,7 +1463,7 @@ def render_group_generator() -> None:
     # Cria botoes para gerar, conferir e imprimir as combinacoes.
     generate_col, checker_col, print_col = st.columns(3)
     # Dispara a geracao das combinacoes dos grupos.
-    generate_col.button("Gerar combinações", type="primary", use_container_width=True, on_click=generate_group_games)
+    generate_col.button("Gerar combinações", type="primary", use_container_width=True, on_click=generate_group_games, disabled=exceeds_limit)
     # Navega ao conferidor com as combinacoes geradas.
     checker_col.button("Conferir jogos gerados", use_container_width=True, on_click=open_group_games_in_checker)
     # Navega ao impressor com as combinacoes geradas.
@@ -2037,8 +1490,6 @@ def render_group_generator() -> None:
 
 # Renderiza a interface do gerador de combinacoes Lotofacil.
 def render_generator():
-    # st.markdown(MODERN_CSS, unsafe_allow_html recebe o valor que armazena em `markdown(MODERN_CSS` o valor obtido de `True)`.
-    st.markdown(MODERN_CSS, unsafe_allow_html=True)
     # Chama `st.subheader` para executa a operacao do objeto com os argumentos indicados.
     st.subheader("Gerador de Combinações")
     # Chama `st.caption` para mostra uma legenda auxiliar ao usuario.
@@ -2070,6 +1521,8 @@ def render_generator():
     configured_count = len(fixed) + int(variable_pick)
     # combination_count recebe o valor que calcula o valor derivado dos dados usados nesta etapa.
     combination_count = math.comb(len(variables), int(variable_pick)) if variables else (1 if fixed else 0)
+    # Identifica combinacoes acima do limite de memoria antes de habilitar a geracao.
+    exceeds_game_limit = combination_count > MAX_GENERATED_GAMES
     
     # first_metric, second_metric recebe o valor que cria as colunas da interface usadas para organizar os controles.
     first_metric, second_metric = st.columns(2)
@@ -2077,6 +1530,10 @@ def render_generator():
     first_metric.metric("Dezenas por Cartela", configured_count)
     # Compoe a expressao ou os argumentos da operacao iniciada acima.
     second_metric.metric("Combinações Previstas", f"{combination_count:,}".replace(",", "."))
+    # Explica por que combinacoes muito grandes nao podem ser geradas nesta sessao.
+    if exceeds_game_limit:
+        # Mostra o limite de seguranca aplicado ao gerador.
+        st.error(f"O total excede o limite de {MAX_GENERATED_GAMES:,} combinações por geração.".replace(",", "."))
 
     # Verifica se `configured_count and not 15 <= configured_count <= 20`.
     if configured_count and not 15 <= configured_count <= 20:
@@ -2117,7 +1574,7 @@ def render_generator():
     # generate_column, checker_column recebe o valor que cria as colunas da interface usadas para organizar os controles.
     generate_column, checker_column = st.columns(2)
     # generate_clicked recebe o valor que armazena em `generate_clicked` o valor obtido de `generate_column.button("⚡ Gerar Combinações", type="primary", use`.
-    generate_clicked = generate_column.button("⚡ Gerar Combinações", type="primary", use_container_width=True)
+    generate_clicked = generate_column.button("⚡ Gerar Combinações", type="primary", use_container_width=True, disabled=exceeds_game_limit)
     # Compoe a expressao ou os argumentos da operacao iniciada acima.
     checker_column.button(
         # Fornece este texto como item da colecao ou argumento da chamada iniciada acima.
@@ -2235,12 +1692,18 @@ def render_intersection_group(letter: str) -> None:
     total = len(fixed) + int(pick)
     # count recebe o valor que calcula o valor derivado dos dados usados nesta etapa.
     count = math.comb(len(variables), int(pick)) if variables else (1 if fixed else 0)
+    # Identifica geracoes acima do limite de combinacoes configurado.
+    exceeds_game_limit = count > MAX_GENERATED_GAMES
     # metric_a, metric_b recebe o valor que cria as colunas da interface usadas para organizar os controles.
     metric_a, metric_b = st.columns(2)
     # Compoe a expressao ou os argumentos da operacao iniciada acima.
     metric_a.metric("Dezenas por Aposta", total)
     # Compoe a expressao ou os argumentos da operacao iniciada acima.
     metric_b.metric("Jogos Previstos", f"{count:,}".replace(",", "."))
+    # Mostra um aviso antes de tentar gerar um arquivo grande.
+    if exceeds_game_limit:
+        # Informa o limite que impede a alocacao de combinacoes excessivas.
+        st.warning(f"O Arquivo {letter} excede o limite de {MAX_GENERATED_GAMES:,} jogos.".replace(",", "."))
     # Verifica se `total and total not in BET_PRICES`.
     if total and total not in BET_PRICES:
         # Chama `st.warning` para mostra um alerta de atencao.
@@ -2272,15 +1735,25 @@ def render_intersection_group(letter: str) -> None:
         )
 
     # Verifica se `st.button(f"🚀 Gerar Arquivo {letter}", key=f"generate_{state_prefix}", type="primary")`.
-    if st.button(f"🚀 Gerar Arquivo {letter}", key=f"generate_{state_prefix}", type="primary"):
+    if st.button(f"🚀 Gerar Arquivo {letter}", key=f"generate_{state_prefix}", type="primary", disabled=exceeds_game_limit):
         # Verifica se `total not in BET_PRICES`.
         if total not in BET_PRICES:
             # Chama `st.error` para mostra uma mensagem de erro.
             st.error("Configure de 15 a 20 dezenas por jogo antes de gerar.")
         # Inicia o caminho alternativo quando as condicoes anteriores nao foram atendidas.
         else:
-            # games recebe o valor que armazena em `games` o valor obtido de `generate_ticket_combinations(fixed, variables, int(pick), order)`.
-            games = generate_ticket_combinations(fixed, variables, int(pick), order)
+            # Tenta criar jogos respeitando limites e selecoes nao sobrepostas.
+            try:
+                # Gera o Arquivo A ou B com os parametros definidos pelo usuario.
+                games = generate_ticket_combinations(fixed, variables, int(pick), order)
+            # Exibe problemas de configuracao sem interromper o aplicativo.
+            except ValueError as exc:
+                # Apresenta o motivo pelo qual o arquivo nao pode ser gerado.
+                st.error(str(exc))
+                # Limpa jogos anteriores para evitar que parecam ser o resultado novo.
+                st.session_state[f"{state_prefix}_games"] = []
+                # Encerra a secao atual sem executar filtros sobre dados antigos.
+                return
             # Verifica se `enable_sequence_filter and sequence_limit > 0`.
             if enable_sequence_filter and sequence_limit > 0:
                 # games recebe o valor que armazena em `games` o valor obtido de `filter_games_by_sequence(games, sequence_limit, fixed=fixed)`.
@@ -2342,8 +1815,6 @@ def render_intersection_group(letter: str) -> None:
 
 # Renderiza e processa os grupos de dezenas do modulo A/B/C.
 def render_intersection_module():
-    # st.markdown(MODERN_CSS, unsafe_allow_html recebe o valor que armazena em `markdown(MODERN_CSS` o valor obtido de `True)`.
-    st.markdown(MODERN_CSS, unsafe_allow_html=True)
     # Chama `st.subheader` para executa a operacao do objeto com os argumentos indicados.
     st.subheader("Módulo A/B/C - Interseção & Variáveis Extras")
     # Chama `st.caption` para mostra uma legenda auxiliar ao usuario.
@@ -2432,12 +1903,18 @@ def render_intersection_module():
         gen_col_c, check_col_c = st.columns(2)
         # Verifica se `gen_col_c.button("✨ Gerar Arquivo C", type="primary", key="generate_intersection_c", use_container_width=True)`.
         if gen_col_c.button("✨ Gerar Arquivo C", type="primary", key="generate_intersection_c", use_container_width=True):
-            # games_c recebe o valor que armazena em `games_c` o valor obtido de `generate_file_c(`.
-            games_c = generate_file_c(
-                # Compoe a expressao ou os argumentos da operacao iniciada acima.
-                games_a, games_b, fixed_a, fixed_b, extra_variables, int(target_size)
-            # Fecha o agrupamento da chamada ou colecao iniciada acima.
-            )
+            # Tenta gerar apenas apostas completas sem ultrapassar os limites.
+            try:
+                # Combina os miolos de A e B com as dezenas extras disponiveis.
+                games_c = generate_file_c(games_a, games_b, fixed_a, fixed_b, extra_variables, int(target_size))
+            # Exibe falhas de configuracao ou excesso de volume sem derrubar a tela.
+            except ValueError as exc:
+                # Mostra a causa que impediu a geracao do Arquivo C.
+                st.error(str(exc))
+                # Remove qualquer resultado anterior que poderia confundir o usuario.
+                st.session_state["intersection_c_games"] = []
+                # Encerra o bloco antes de aplicar filtros ou exibir resultados antigos.
+                return
             # Verifica se `enable_sequence_filter and sequence_limit > 0`.
             if enable_sequence_filter and sequence_limit > 0:
                 # games_c recebe o valor que armazena em `games_c` o valor obtido de `filter_games_by_sequence(games_c, sequence_limit)`.
@@ -2559,8 +2036,6 @@ def render_intersection_module():
 
 # Renderiza o conferidor e compara apostas com resultados de concursos.
 def render_checker():
-    # st.markdown(MODERN_CSS, unsafe_allow_html recebe o valor que armazena em `markdown(MODERN_CSS` o valor obtido de `True)`.
-    st.markdown(MODERN_CSS, unsafe_allow_html=True)
     # Chama `st.subheader` para executa a operacao do objeto com os argumentos indicados.
     st.subheader("Conferidor Oficial de Concursos")
     # Chama `st.caption` para mostra uma legenda auxiliar ao usuario.
@@ -2583,7 +2058,7 @@ def render_checker():
                 # Fecha o agrupamento da chamada ou colecao iniciada acima.
                 ]
             # Trata a excecao indicada para permitir uma resposta controlada ao erro.
-            except requests.RequestException as exc:
+            except (requests.RequestException, ValueError) as exc:
                 # Compoe a expressao ou os argumentos da operacao iniciada acima.
                 st.session_state["auto_check_pending"] = False
                 # Chama `st.error` para mostra uma mensagem de erro.
@@ -2638,7 +2113,7 @@ def render_checker():
                 # Chama `st.session_state["calendar_results"] = fetch_results_for_dates` para executa a operacao do objeto com os argumentos indicados.
                 st.session_state["calendar_results"] = fetch_results_for_dates(start_date, end_date)
             # Trata a excecao indicada para permitir uma resposta controlada ao erro.
-            except requests.RequestException as exc:
+            except (requests.RequestException, ValueError) as exc:
                 # Chama `st.error` para mostra uma mensagem de erro.
                 st.error(f"Não foi possível consultar a API oficial da CAIXA. Verifique a conexão ou se o firewall/antivírus permite conexões HTTPS do Python. Detalhe: {exc}")
                 # Devolve o controle ao chamador sem valor ao codigo que chamou esta funcao.
@@ -2709,8 +2184,16 @@ def render_checker():
         uploaded = st.file_uploader("Arquivo .txt", type=["txt"])
         # Verifica se `uploaded`.
         if uploaded:
-            # games_text recebe o valor que armazena em `games_text` o valor obtido de `uploaded.read().decode("utf-8")`.
-            games_text = uploaded.read().decode("utf-8")
+            # Recupera o conteudo sem consumir permanentemente o cursor do upload.
+            uploaded_bytes = uploaded.getvalue()
+            # Tenta decodificar arquivos UTF-8 e remove eventual BOM do Bloco de Notas.
+            try:
+                # Decodifica primeiro no formato Unicode mais comum.
+                games_text = uploaded_bytes.decode("utf-8-sig")
+            # Interpreta arquivos Windows antigos usando a codificacao cp1252.
+            except UnicodeDecodeError:
+                # Decodifica bytes de arquivos ANSI sem falhar na leitura da tela.
+                games_text = uploaded_bytes.decode("cp1252")
 
     # run_check recebe o valor que armazena em `run_check` o valor obtido de `st.button("🚀 Conferir Jogos", type="primary")`.
     run_check = st.button("🚀 Conferir Jogos", type="primary")
@@ -2742,8 +2225,16 @@ def render_checker():
         games, invalid_lines = [], []
         # Percorre idx, line in enumerate(lines, start=1) e executa o bloco para cada item.
         for idx, line in enumerate(lines, start=1):
-            # game recebe o valor que armazena em `game` o valor obtido de `parse_game_line(line)`.
-            game = parse_game_line(line)
+            # Interpreta a linha e transforma dezenas fora do intervalo em aviso localizado.
+            try:
+                # Le a aposta depois de remover rotulos e validar a faixa de dezenas.
+                game = parse_game_line(line)
+            # Trata entradas com dezenas que nao existem no volante.
+            except ValueError as exc:
+                # Guarda o problema com o numero da linha para o usuario corrigir.
+                invalid_lines.append(f"Linha {idx}: {exc}")
+                # Pula para a proxima linha sem incluir esta aposta na conferencia.
+                continue
             # Verifica se `game is None`.
             if game is None:
                 # Pula para a proxima repeticao do laco atual.
@@ -2775,7 +2266,15 @@ def render_checker():
         overall_units = {points: 0 for points in range(11, 16)}
         # total_received recebe o valor que armazena em `total_received` o valor obtido de `0.0`.
         total_received = 0.0
-        # all_rows recebe o valor que monta a colecao de valores usada pela etapa atual.
+        # Define as colunas ordenadas do relatorio completo em CSV.
+        result_columns = ["Concurso", "Data", "Jogo", "Dezenas", "Acertos", "Prêmios (11–15)", "Valor Recebido"]
+        # Abre um buffer textual para compor o relatorio sem guardar cada linha como dicionario.
+        csv_buffer = StringIO()
+        # Cria um escritor CSV com cabecalho e colunas estaveis.
+        csv_writer = csv.DictWriter(csv_buffer, fieldnames=result_columns)
+        # Escreve o cabecalho uma vez antes de percorrer concursos e jogos.
+        csv_writer.writeheader()
+        # Mantem em memoria somente linhas premiadas para a tabela visivel.
         all_rows = []
 
         # Percorre contest in selected_contests e executa o bloco para cada item.
@@ -2806,16 +2305,14 @@ def render_checker():
                     contest_units[points] += units[points]
                     # Atualiza `overall_units[points]` com o resultado da operacao `+=` aplicada a `units[points]`.
                     overall_units[points] += units[points]
-                # Compoe a expressao ou os argumentos da operacao iniciada acima.
-                all_rows.append({
-                    # Fornece este texto como item da colecao ou argumento da chamada iniciada acima.
-                    "Concurso": contest, "Data": result["data"], "Jogo": game_index,
-                    # Fornece este texto como item da colecao ou argumento da chamada iniciada acima.
-                    "Dezenas": len(game), "Acertos": hits,
-                    # Fornece este texto como item da colecao ou argumento da chamada iniciada acima.
-                    "Prêmios (11–15)": sum(units.values()), "Valor Recebido": brl(received),
-                # Compoe a expressao ou os argumentos da operacao iniciada acima.
-                })
+                # Monta uma linha numerica que pode ser ordenada corretamente na tabela.
+                result_row = {"Concurso": contest, "Data": result["data"], "Jogo": game_index, "Dezenas": len(game), "Acertos": hits, "Prêmios (11–15)": sum(units.values()), "Valor Recebido": received}
+                # Escreve cada jogo e concurso no relatorio completo de CSV.
+                csv_writer.writerow(result_row)
+                # Guarda apenas apostas premiadas para limitar a memoria e a tabela.
+                if result_row["Prêmios (11–15)"]:
+                    # Adiciona a linha premiada para exibicao e ordenacao numerica.
+                    all_rows.append(result_row)
             # Atualiza `total_received` com o resultado da operacao `+=` aplicada a `contest_received`.
             total_received += contest_received
             # Chama `st.markdown` para renderiza texto Markdown ou HTML na interface.
@@ -2854,22 +2351,24 @@ def render_checker():
             # Compoe a expressao ou os argumentos da operacao iniciada acima.
             columns[index].metric(f"Total {points} Pts", overall_units[points])
 
-        # winners recebe o valor que monta a colecao de valores usada pela etapa atual.
-        winners = [row for row in all_rows if row["Prêmios (11–15)"]]
+        # Usa somente apostas premiadas na tabela interativa compacta.
+        winners = all_rows
         # Verifica se `winners`.
         if winners:
             # Chama `st.markdown` para renderiza texto Markdown ou HTML na interface.
             st.markdown("#### 🏆 Jogos Premiados")
-            # st.dataframe(winners, use_container_width recebe o valor que armazena em `dataframe(winners` o valor obtido de `True, hide_index=True)`.
-            st.dataframe(winners, use_container_width=True, hide_index=True)
+            # Mostra valores monetarios como numeros com formato brasileiro de moeda.
+            st.dataframe(winners, use_container_width=True, hide_index=True, column_config={"Valor Recebido": st.column_config.NumberColumn("Valor Recebido", format="R$ %.2f")})
         # Inicia o caminho alternativo quando as condicoes anteriores nao foram atendidas.
         else:
             # Chama `st.info` para mostra uma mensagem informativa.
             st.info("Nenhum prêmio de 11 a 15 pontos nos concursos selecionados.")
-        # Chama `st.markdown` para renderiza texto Markdown ou HTML na interface.
-        st.markdown("#### 📋 Todos os Jogos Conferidos")
-        # st.dataframe(all_rows, use_container_width recebe o valor que armazena em `dataframe(all_rows` o valor obtido de `True, hide_index=True)`.
-        st.dataframe(all_rows, use_container_width=True, hide_index=True)
+        # Identifica a secao que oferece o relatorio completo em arquivo.
+        st.markdown("#### 📋 Relatório completo")
+        # Explica que a tabela e compacta e que o CSV contem todas as linhas.
+        st.caption(f"Tabela com {len(winners):,} resultado(s) premiado(s); o CSV inclui todos os {len(games) * len(selected_contests):,} pares de jogo e concurso.".replace(",", "."))
+        # Baixa o relatorio completo, incluindo jogos sem premio.
+        st.download_button("Baixar todos os resultados (.csv)", data=csv_buffer.getvalue(), file_name="resultados_conferencia_lotofacil.csv", mime="text/csv", use_container_width=True)
 
 
 
@@ -2886,8 +2385,8 @@ def parse_print_games(text: str) -> tuple[list[list[int]], list[str]]:
         if not line.strip():
             # Pula para a proxima repeticao do laco atual.
             continue
-        # Extrai os numeros da linha e ignora os que nao pertencem a faixa de 1 a 25.
-        numbers = [number for number in parse_numbers(line) if number in ALL_NUMBERS]
+        # Retira rotulos e ignora dezenas fora de 1 a 25 conforme regra do impressor.
+        numbers = [number for number in parse_numbers(strip_game_label(line)) if number in ALL_NUMBERS]
         # Verifica se `not numbers`.
         if not numbers:
             # Ignora linhas vazias ou que so contenham valores fora do intervalo valido.
@@ -2912,8 +2411,6 @@ def parse_print_games(text: str) -> tuple[list[list[int]], list[str]]:
 
 # Renderiza a area de colagem de apostas e geracao da folha PDF.
 def render_print_module() -> None:
-    # st.markdown(MODERN_CSS, unsafe_allow_html recebe o valor que armazena em `markdown(MODERN_CSS` o valor obtido de `True)`.
-    st.markdown(MODERN_CSS, unsafe_allow_html=True)
     # Chama `st.subheader` para executa a operacao do objeto com os argumentos indicados.
     st.subheader("Imprimir Folha Loto")
     # Chama `st.caption` para mostra uma legenda auxiliar ao usuario.
@@ -3068,6 +2565,8 @@ def main():
         initial_sidebar_state="collapsed",
     # Fecha o agrupamento da chamada ou colecao iniciada acima.
     )
+    # Aplica os estilos externos uma vez, apos configurar a pagina e antes de renderizar os modulos.
+    st.markdown(MODERN_CSS, unsafe_allow_html=True)
 
     # Hero Header Sem Imagem de Logo
     # Chama `st.markdown` para renderiza texto Markdown ou HTML na interface.

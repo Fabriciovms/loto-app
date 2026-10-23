@@ -1,0 +1,632 @@
+/* Fontes Globais e Estilo Base */
+    /* Seleciona `html, body, .stApp, p, h1, h2, h3, h4, h5, h6, label, input, textarea, select` para aplicar as regras visuais logo abaixo. */
+    html, body, .stApp, p, h1, h2, h3, h4, h5, h6, label, input, textarea, select {
+        /* Usa a pilha de fontes do sistema para evitar uma requisicao externa de fonte. */
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    /* Preservar ícones nativos do Streamlit e do Expander */
+    /* Completa a regra visual CSS `[data-testid="stIconMaterial"],`. */
+    [data-testid="stIconMaterial"],
+    /* Completa a regra visual CSS `[class*="MaterialSymbols"],`. */
+    [class*="MaterialSymbols"],
+    /* Completa a regra visual CSS `[class*="material-icons"],`. */
+    [class*="material-icons"],
+    /* Completa a regra visual CSS `div[data-testid="stExpander"] summary *,`. */
+    div[data-testid="stExpander"] summary *,
+    /* Seleciona `div[data-testid="stExpander"] i` para aplicar as regras visuais logo abaixo. */
+    div[data-testid="stExpander"] i {
+        /* Escolhe a familia tipografica com o valor `'Material Symbols Outlined', 'Material Icons', inherit !important`. */
+        font-family: 'Material Symbols Outlined', 'Material Icons', inherit !important;
+    }
+
+    /* Ocultar elementos nativos desnecessários */
+    /* Define a propriedade `#mainmenu {visibility` com o valor `hidden;}`. */
+    #MainMenu {visibility: hidden;}
+    /* Define a propriedade `footer {visibility` com o valor `hidden;}`. */
+    footer {visibility: hidden;}
+
+    /* Estilização limpa para Expanders */
+    /* Seleciona `div[data-testid="stExpander"]` para aplicar as regras visuais logo abaixo. */
+    div[data-testid="stExpander"] {
+        /* Arredonda os cantos com o valor `14px !important`. */
+        border-radius: 14px !important;
+        /* Define a borda e sua espessura com o valor `1px solid #e2e8f0 !important`. */
+        border: 1px solid #e2e8f0 !important;
+        /* Aplica sombra com o valor `0 4px 12px rgba(0, 0, 0, 0.03) !important`. */
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03) !important;
+        /* Define o fundo ou preenchimento com o valor `#ffffff !important`. */
+        background: #ffffff !important;
+        /* Define o espaco abaixo do componente com o valor `1rem !important`. */
+        margin-bottom: 1rem !important;
+        /* Controla o conteudo que ultrapassa os limites com o valor `hidden !important`. */
+        overflow: hidden !important;
+    }
+    /* Seleciona `div[data-testid="stExpander"] summary` para aplicar as regras visuais logo abaixo. */
+    div[data-testid="stExpander"] summary {
+        /* Define o peso da fonte com o valor `700 !important`. */
+        font-weight: 700 !important;
+        /* Define a cor do texto com o valor `#1e1b4b !important`. */
+        color: #1e1b4b !important;
+        /* Define o tamanho do texto com o valor `1rem !important`. */
+        font-size: 1rem !important;
+    }
+
+    /* Hero Header Moderno */
+    /* Seleciona `.hero-container` para aplicar as regras visuais logo abaixo. */
+    .hero-container {
+        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #4c1d95 100%)`. */
+        background: linear-gradient(135deg, #1e1b4b 0%, #312e81 40%, #4c1d95 100%);
+        /* Arredonda os cantos com o valor `20px`. */
+        border-radius: 20px;
+        /* Define o espaco interno com o valor `2.2rem 2rem`. */
+        padding: 2.2rem 2rem;
+        /* Define a cor do texto com o valor `#ffffff`. */
+        color: #ffffff;
+        /* Aplica sombra com o valor `0 15px 35px -5px rgba(76, 29, 149, 0.35)`. */
+        box-shadow: 0 15px 35px -5px rgba(76, 29, 149, 0.35);
+        /* Define o espaco abaixo do componente com o valor `1.8rem`. */
+        margin-bottom: 1.8rem;
+        /* Define o posicionamento com o valor `relative`. */
+        position: relative;
+        /* Controla o conteudo que ultrapassa os limites com o valor `hidden`. */
+        overflow: hidden;
+        /* Define a borda e sua espessura com o valor `1px solid rgba(255, 255, 255, 0.15)`. */
+        border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    /* Seleciona `.hero-container::before` para aplicar as regras visuais logo abaixo. */
+    .hero-container::before {
+        /* Define o conteudo gerado com o valor `""`. */
+        content: "";
+        /* Define o posicionamento com o valor `absolute`. */
+        position: absolute;
+        /* Define a distancia do topo com o valor `-50%`. */
+        top: -50%;
+        /* Define a distancia da direita com o valor `-10%`. */
+        right: -10%;
+        /* Define a largura com o valor `300px`. */
+        width: 300px;
+        /* Define a altura com o valor `300px`. */
+        height: 300px;
+        /* Define o fundo ou preenchimento com o valor `radial-gradient(circle, rgba(168, 85, 247, 0.3) 0%, rgba(0,0,0,0) 70%)`. */
+        background: radial-gradient(circle, rgba(168, 85, 247, 0.3) 0%, rgba(0,0,0,0) 70%);
+        /* Arredonda os cantos com o valor `50%`. */
+        border-radius: 50%;
+        /* Controla se o elemento recebe eventos do ponteiro com o valor `none`. */
+        pointer-events: none;
+    }
+    /* Seleciona `.hero-badge` para aplicar as regras visuais logo abaixo. */
+    .hero-badge {
+        /* Define como o elemento participa do layout com o valor `inline-flex`. */
+        display: inline-flex;
+        /* Alinha itens no eixo transversal com o valor `center`. */
+        align-items: center;
+        /* Define o espaco entre itens com o valor `6px`. */
+        gap: 6px;
+        /* Define o fundo ou preenchimento com o valor `rgba(255, 255, 255, 0.15)`. */
+        background: rgba(255, 255, 255, 0.15);
+        /* Aplica filtro ao conteudo atres do elemento com o valor `blur(10px)`. */
+        backdrop-filter: blur(10px);
+        /* Define o espaco interno com o valor `4px 14px`. */
+        padding: 4px 14px;
+        /* Arredonda os cantos com o valor `20px`. */
+        border-radius: 20px;
+        /* Define o tamanho do texto com o valor `0.78rem`. */
+        font-size: 0.78rem;
+        /* Define o peso da fonte com o valor `700`. */
+        font-weight: 700;
+        /* Define o espacamento entre letras com o valor `0.08em`. */
+        letter-spacing: 0.08em;
+        /* Transforma a apresentacao de maiusculas/minusculas com o valor `uppercase`. */
+        text-transform: uppercase;
+        /* Define a cor do texto com o valor `#e9d5ff`. */
+        color: #e9d5ff;
+        /* Define a borda e sua espessura com o valor `1px solid rgba(255, 255, 255, 0.2)`. */
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        /* Define o espaco abaixo do componente com o valor `0.75rem`. */
+        margin-bottom: 0.75rem;
+    }
+    /* Seleciona `.hero-title` para aplicar as regras visuais logo abaixo. */
+    .hero-title {
+        /* Usa a pilha de fontes do sistema para manter o titulo legivel sem fonte remota. */
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        /* Define o tamanho do texto com o valor `2.4rem`. */
+        font-size: 2.4rem;
+        /* Define o peso da fonte com o valor `800`. */
+        font-weight: 800;
+        /* Define o espaco externo com o valor `0`. */
+        margin: 0;
+        /* Define a propriedade `line-height` com o valor `1.15`. */
+        line-height: 1.15;
+        /* Define o fundo ou preenchimento com o valor `linear-gradient(120deg, #ffffff 30%, #f3e8ff 70%, #d8b4fe 100%)`. */
+        background: linear-gradient(120deg, #ffffff 30%, #f3e8ff 70%, #d8b4fe 100%);
+        /* Recorta o fundo pela forma do texto com o valor `text`. */
+        -webkit-background-clip: text;
+        /* Define o preenchimento do texto em navegadores webkit com o valor `transparent`. */
+        -webkit-text-fill-color: transparent;
+    }
+    /* Seleciona `.hero-subtitle` para aplicar as regras visuais logo abaixo. */
+    .hero-subtitle {
+        /* Define a cor do texto com o valor `#c084fc`. */
+        color: #c084fc;
+        /* Define o tamanho do texto com o valor `0.98rem`. */
+        font-size: 0.98rem;
+        /* Define o peso da fonte com o valor `500`. */
+        font-weight: 500;
+        /* Define o espaco acima do componente com o valor `0.5rem`. */
+        margin-top: 0.5rem;
+        /* Define o espaco abaixo do componente com o valor `0`. */
+        margin-bottom: 0;
+    }
+
+    /* Cartela de Dezenas Interativa (Volante) */
+    /* Seleciona `.ticket-card` para aplicar as regras visuais logo abaixo. */
+    .ticket-card {
+        /* Define o fundo ou preenchimento com o valor `#ffffff`. */
+        background: #ffffff;
+        /* Arredonda os cantos com o valor `20px`. */
+        border-radius: 20px;
+        /* Define a borda e sua espessura com o valor `1px solid #e2e8f0`. */
+        border: 1px solid #e2e8f0;
+        /* Aplica sombra com o valor `0 10px 30px -5px rgba(0, 0, 0, 0.06)`. */
+        box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.06);
+        /* Controla o conteudo que ultrapassa os limites com o valor `hidden`. */
+        overflow: hidden;
+        /* Define o espaco externo com o valor `0 auto`. */
+        margin: 0 auto;
+        /* Suaviza as mudancas visuais com o valor `all 0.3s ease`. */
+        transition: all 0.3s ease;
+    }
+    /* Seleciona `.ticket-header` para aplicar as regras visuais logo abaixo. */
+    .ticket-header {
+        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #831843 0%, #be185d 50%, #9d174d 100%)`. */
+        background: linear-gradient(135deg, #831843 0%, #be185d 50%, #9d174d 100%);
+        /* Define o espaco interno com o valor `1rem 1.25rem`. */
+        padding: 1rem 1.25rem;
+        /* Define a propriedade `text-align` com o valor `center`. */
+        text-align: center;
+        /* Define a cor do texto com o valor `#ffffff`. */
+        color: #ffffff;
+    }
+    /* Seleciona `.ticket-header-title` para aplicar as regras visuais logo abaixo. */
+    .ticket-header-title {
+        /* Usa a pilha de fontes do sistema para manter o titulo legivel sem fonte remota. */
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        /* Define o tamanho do texto com o valor `1.35rem`. */
+        font-size: 1.35rem;
+        /* Define o peso da fonte com o valor `800`. */
+        font-weight: 800;
+        /* Define o espacamento entre letras com o valor `0.12em`. */
+        letter-spacing: 0.12em;
+        /* Define o espaco externo com o valor `0`. */
+        margin: 0;
+        /* Transforma a apresentacao de maiusculas/minusculas com o valor `uppercase`. */
+        text-transform: uppercase;
+    }
+    /* Seleciona `.ticket-header-sub` para aplicar as regras visuais logo abaixo. */
+    .ticket-header-sub {
+        /* Define o tamanho do texto com o valor `0.76rem`. */
+        font-size: 0.76rem;
+        /* Define o peso da fonte com o valor `600`. */
+        font-weight: 600;
+        /* Define a cor do texto com o valor `#fbcfe8`. */
+        color: #fbcfe8;
+        /* Define o espaco acima do componente com o valor `4px`. */
+        margin-top: 4px;
+        /* Define o espacamento entre letras com o valor `0.04em`. */
+        letter-spacing: 0.04em;
+    }
+    /* Seleciona `.ticket-body` para aplicar as regras visuais logo abaixo. */
+    .ticket-body {
+        /* Define o espaco interno com o valor `1.2rem`. */
+        padding: 1.2rem;
+        /* Define o fundo ou preenchimento com o valor `#fafafa`. */
+        background: #fafafa;
+    }
+    /* Seleciona `.ticket-legend` para aplicar as regras visuais logo abaixo. */
+    .ticket-legend {
+        /* Define como o elemento participa do layout com o valor `flex`. */
+        display: flex;
+        /* Distribui itens no eixo principal com o valor `center`. */
+        justify-content: center;
+        /* Alinha itens no eixo transversal com o valor `center`. */
+        align-items: center;
+        /* Define o espaco entre itens com o valor `12px`. */
+        gap: 12px;
+        /* Define o espaco interno com o valor `0.75rem`. */
+        padding: 0.75rem;
+        /* Define o fundo ou preenchimento com o valor `#ffffff`. */
+        background: #ffffff;
+        /* Define a propriedade `border-top` com o valor `1px solid #f1f5f9`. */
+        border-top: 1px solid #f1f5f9;
+        /* Define o tamanho do texto com o valor `0.78rem`. */
+        font-size: 0.78rem;
+        /* Define o peso da fonte com o valor `600`. */
+        font-weight: 600;
+        /* Define a cor do texto com o valor `#475569`. */
+        color: #475569;
+        /* Permite que os itens quebrem para a linha seguinte com o valor `wrap`. */
+        flex-wrap: wrap;
+    }
+    /* Seleciona `.legend-item` para aplicar as regras visuais logo abaixo. */
+    .legend-item {
+        /* Define como o elemento participa do layout com o valor `inline-flex`. */
+        display: inline-flex;
+        /* Alinha itens no eixo transversal com o valor `center`. */
+        align-items: center;
+        /* Define o espaco entre itens com o valor `6px`. */
+        gap: 6px;
+    }
+    /* Seleciona `.legend-dot` para aplicar as regras visuais logo abaixo. */
+    .legend-dot {
+        /* Define a largura com o valor `10px`. */
+        width: 10px;
+        /* Define a altura com o valor `10px`. */
+        height: 10px;
+        /* Arredonda os cantos com o valor `50%`. */
+        border-radius: 50%;
+    }
+    /* Define a propriedade `.dot-fixed { background` com o valor `#be185d; box-shadow: 0 0 6px rgba(190, 24, 93, 0.5); }`. */
+    .dot-fixed { background: #be185d; box-shadow: 0 0 6px rgba(190, 24, 93, 0.5); }
+    /* Define a propriedade `.dot-variable { background` com o valor `#2563eb; box-shadow: 0 0 6px rgba(37, 99, 235, 0.5); }`. */
+    .dot-variable { background: #2563eb; box-shadow: 0 0 6px rgba(37, 99, 235, 0.5); }
+    /* Define a propriedade `.dot-extra { background` com o valor `#10b981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.5); }`. */
+    .dot-extra { background: #10b981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.5); }
+    /* Define a propriedade `.dot-empty { background` com o valor `#e2e8f0; }`. */
+    .dot-empty { background: #e2e8f0; }
+
+    /* Estilização dos Botões de Dezenas (Pílulas) - usando st-key do Streamlit */
+    /* Completa a regra visual CSS `[class*="st-key-btn_ticket_"] button,`. */
+    [class*="st-key-btn_ticket_"] button,
+    /* Completa a regra visual CSS `[class*="st-key-btn_sel_"] button,`. */
+    [class*="st-key-btn_sel_"] button,
+    /* Seleciona `[class*="st-key-btn_extra_"] button` para aplicar as regras visuais logo abaixo. */
+    [class*="st-key-btn_extra_"] button {
+        /* Arredonda os cantos com o valor `12px !important`. */
+        border-radius: 12px !important;
+        /* Mantem a tipografia dos botoes coerente com as fontes disponiveis no sistema. */
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+        /* Define o tamanho do texto com o valor `0.95rem !important`. */
+        font-size: 0.95rem !important;
+        /* Define o peso da fonte com o valor `700 !important`. */
+        font-weight: 700 !important;
+        /* Define a altura com o valor `2.6rem !important`. */
+        height: 2.6rem !important;
+        /* Define a altura minima com o valor `2.6rem !important`. */
+        min-height: 2.6rem !important;
+        /* Define o espaco interno com o valor `0 !important`. */
+        padding: 0 !important;
+        /* Define a largura com o valor `100% !important`. */
+        width: 100% !important;
+        /* Suaviza as mudancas visuais com o valor `all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important`. */
+        transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+    }
+
+    /* Estado Desmarcado (3º Clique / Neutro - BRANCO) */
+    /* Completa a regra visual CSS `[class*="st-key-btn_ticket_"][class*="_empty"] button,`. */
+    [class*="st-key-btn_ticket_"][class*="_empty"] button,
+    /* Completa a regra visual CSS `[class*="st-key-btn_sel_"][class*="_empty"] button,`. */
+    [class*="st-key-btn_sel_"][class*="_empty"] button,
+    /* Seleciona `[class*="st-key-btn_extra_"][class*="_empty"] button` para aplicar as regras visuais logo abaixo. */
+    [class*="st-key-btn_extra_"][class*="_empty"] button {
+        /* Define o fundo ou preenchimento com o valor `#ffffff !important`. */
+        background: #ffffff !important;
+        /* Define a cor do fundo com o valor `#ffffff !important`. */
+        background-color: #ffffff !important;
+        /* Define a borda e sua espessura com o valor `1.5px solid #cbd5e1 !important`. */
+        border: 1.5px solid #cbd5e1 !important;
+        /* Define a cor do texto com o valor `#334155 !important`. */
+        color: #334155 !important;
+        /* Aplica sombra com o valor `0 2px 4px rgba(0,0,0,0.02) !important`. */
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02) !important;
+    }
+    /* Define a propriedade `[class*="st-key-btn_ticket_"][class*="_empty"] button` com o valor `hover,`. */
+    [class*="st-key-btn_ticket_"][class*="_empty"] button:hover,
+    /* Define a propriedade `[class*="st-key-btn_sel_"][class*="_empty"] button` com o valor `hover,`. */
+    [class*="st-key-btn_sel_"][class*="_empty"] button:hover,
+    /* Seleciona `[class*="st-key-btn_extra_"][class*="_empty"] button:hover` para aplicar as regras visuais logo abaixo. */
+    [class*="st-key-btn_extra_"][class*="_empty"] button:hover {
+        /* Define o fundo ou preenchimento com o valor `#f1f5f9 !important`. */
+        background: #f1f5f9 !important;
+        /* Define a cor do fundo com o valor `#f1f5f9 !important`. */
+        background-color: #f1f5f9 !important;
+        /* Define a cor da borda com o valor `#94a3b8 !important`. */
+        border-color: #94a3b8 !important;
+        /* Define a cor do texto com o valor `#0f172a !important`. */
+        color: #0f172a !important;
+        /* Aplica uma transformacao visual com o valor `translateY(-2px) !important`. */
+        transform: translateY(-2px) !important;
+        /* Aplica sombra com o valor `0 4px 8px rgba(0,0,0,0.06) !important`. */
+        box-shadow: 0 4px 8px rgba(0,0,0,0.06) !important;
+    }
+
+    /* Estado Dezena Fixa (1º CLIQUE - VINHO / MAGENTA) */
+    /* Seleciona `[class*="st-key-btn_ticket_"][class*="_fixed"] button` para aplicar as regras visuais logo abaixo. */
+    [class*="st-key-btn_ticket_"][class*="_fixed"] button {
+        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #831843 0%, #be185d 100%) !important`. */
+        background: linear-gradient(135deg, #831843 0%, #be185d 100%) !important;
+        /* Define a cor do fundo com o valor `#be185d !important`. */
+        background-color: #be185d !important;
+        /* Define a borda e sua espessura com o valor `1.5px solid #831843 !important`. */
+        border: 1.5px solid #831843 !important;
+        /* Define a cor do texto com o valor `#ffffff !important`. */
+        color: #ffffff !important;
+        /* Aplica sombra com o valor `0 4px 14px rgba(190, 24, 93, 0.45) !important`. */
+        box-shadow: 0 4px 14px rgba(190, 24, 93, 0.45) !important;
+        /* Aplica uma transformacao visual com o valor `translateY(-1px) !important`. */
+        transform: translateY(-1px) !important;
+    }
+    /* Seleciona `[class*="st-key-btn_ticket_"][class*="_fixed"] button:hover` para aplicar as regras visuais logo abaixo. */
+    [class*="st-key-btn_ticket_"][class*="_fixed"] button:hover {
+        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #9d174d 0%, #db2777 100%) !important`. */
+        background: linear-gradient(135deg, #9d174d 0%, #db2777 100%) !important;
+        /* Define a cor do fundo com o valor `#db2777 !important`. */
+        background-color: #db2777 !important;
+        /* Aplica sombra com o valor `0 6px 18px rgba(190, 24, 93, 0.55) !important`. */
+        box-shadow: 0 6px 18px rgba(190, 24, 93, 0.55) !important;
+    }
+
+    /* Estado Dezena Variável (2º CLIQUE - AZUL ELÉTRICO) */
+    /* Seleciona `[class*="st-key-btn_ticket_"][class*="_variable"] button` para aplicar as regras visuais logo abaixo. */
+    [class*="st-key-btn_ticket_"][class*="_variable"] button {
+        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important`. */
+        background: linear-gradient(135deg, #1e40af 0%, #2563eb 100%) !important;
+        /* Define a cor do fundo com o valor `#2563eb !important`. */
+        background-color: #2563eb !important;
+        /* Define a borda e sua espessura com o valor `1.5px solid #1e40af !important`. */
+        border: 1.5px solid #1e40af !important;
+        /* Define a cor do texto com o valor `#ffffff !important`. */
+        color: #ffffff !important;
+        /* Aplica sombra com o valor `0 4px 14px rgba(37, 99, 235, 0.45) !important`. */
+        box-shadow: 0 4px 14px rgba(37, 99, 235, 0.45) !important;
+        /* Aplica uma transformacao visual com o valor `translateY(-1px) !important`. */
+        transform: translateY(-1px) !important;
+    }
+    /* Seleciona `[class*="st-key-btn_ticket_"][class*="_variable"] button:hover` para aplicar as regras visuais logo abaixo. */
+    [class*="st-key-btn_ticket_"][class*="_variable"] button:hover {
+        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%) !important`. */
+        background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%) !important;
+        /* Define a cor do fundo com o valor `#3b82f6 !important`. */
+        background-color: #3b82f6 !important;
+        /* Aplica sombra com o valor `0 6px 18px rgba(37, 99, 235, 0.55) !important`. */
+        box-shadow: 0 6px 18px rgba(37, 99, 235, 0.55) !important;
+    }
+
+    /* Estado Dezena Extra / Selecionada (VERDE ESMERALDA) */
+    /* Completa a regra visual CSS `[class*="st-key-btn_ticket_"][class*="_extra"] button,`. */
+    [class*="st-key-btn_ticket_"][class*="_extra"] button,
+    /* Completa a regra visual CSS `[class*="st-key-btn_sel_"][class*="_selected"] button,`. */
+    [class*="st-key-btn_sel_"][class*="_selected"] button,
+    /* Seleciona `[class*="st-key-btn_extra_"][class*="_selected"] button` para aplicar as regras visuais logo abaixo. */
+    [class*="st-key-btn_extra_"][class*="_selected"] button {
+        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #047857 0%, #10b981 100%) !important`. */
+        background: linear-gradient(135deg, #047857 0%, #10b981 100%) !important;
+        /* Define a cor do fundo com o valor `#10b981 !important`. */
+        background-color: #10b981 !important;
+        /* Define a borda e sua espessura com o valor `1.5px solid #047857 !important`. */
+        border: 1.5px solid #047857 !important;
+        /* Define a cor do texto com o valor `#ffffff !important`. */
+        color: #ffffff !important;
+        /* Aplica sombra com o valor `0 4px 14px rgba(16, 185, 129, 0.45) !important`. */
+        box-shadow: 0 4px 14px rgba(16, 185, 129, 0.45) !important;
+        /* Aplica uma transformacao visual com o valor `translateY(-1px) !important`. */
+        transform: translateY(-1px) !important;
+    }
+    /* Define a propriedade `[class*="st-key-btn_ticket_"][class*="_extra"] button` com o valor `hover,`. */
+    [class*="st-key-btn_ticket_"][class*="_extra"] button:hover,
+    /* Define a propriedade `[class*="st-key-btn_sel_"][class*="_selected"] button` com o valor `hover,`. */
+    [class*="st-key-btn_sel_"][class*="_selected"] button:hover,
+    /* Seleciona `[class*="st-key-btn_extra_"][class*="_selected"] button:hover` para aplicar as regras visuais logo abaixo. */
+    [class*="st-key-btn_extra_"][class*="_selected"] button:hover {
+        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #059669 0%, #34d399 100%) !important`. */
+        background: linear-gradient(135deg, #059669 0%, #34d399 100%) !important;
+        /* Define a cor do fundo com o valor `#059669 !important`. */
+        background-color: #059669 !important;
+        /* Aplica sombra com o valor `0 6px 18px rgba(16, 185, 129, 0.55) !important`. */
+        box-shadow: 0 6px 18px rgba(16, 185, 129, 0.55) !important;
+    }
+
+    /* Estilização dos Containers & Envoltórios de Borda */
+    /* Seleciona `div[data-testid="stVerticalBlockBorderWrapper"]` para aplicar as regras visuais logo abaixo. */
+    div[data-testid="stVerticalBlockBorderWrapper"] {
+        /* Arredonda os cantos com o valor `16px !important`. */
+        border-radius: 16px !important;
+        /* Define a borda e sua espessura com o valor `1px solid #e2e8f0 !important`. */
+        border: 1px solid #e2e8f0 !important;
+        /* Aplica sombra com o valor `0 4px 20px rgba(0, 0, 0, 0.03) !important`. */
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03) !important;
+        /* Define o fundo ou preenchimento com o valor `#ffffff !important`. */
+        background: #ffffff !important;
+    }
+
+    /* Estilização de Botões de Ação Principais (Excluindo Volantes) */
+    /* Seleciona `div.stButton:not([class*="st-key-ticket_"]) button[kind="primary"]` para aplicar as regras visuais logo abaixo. */
+    div.stButton:not([class*="st-key-ticket_"]) button[kind="primary"] {
+        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #4c1d95 0%, #6d28d9 100%) !important`. */
+        background: linear-gradient(135deg, #4c1d95 0%, #6d28d9 100%) !important;
+        /* Define a cor do fundo com o valor `#6d28d9 !important`. */
+        background-color: #6d28d9 !important;
+        /* Define a borda e sua espessura com o valor `none !important`. */
+        border: none !important;
+        /* Arredonda os cantos com o valor `12px !important`. */
+        border-radius: 12px !important;
+        /* Define a cor do texto com o valor `#ffffff !important`. */
+        color: #ffffff !important;
+        /* Define o peso da fonte com o valor `700 !important`. */
+        font-weight: 700 !important;
+        /* Define o tamanho do texto com o valor `1rem !important`. */
+        font-size: 1rem !important;
+        /* Define o espaco interno com o valor `0.6rem 1.2rem !important`. */
+        padding: 0.6rem 1.2rem !important;
+        /* Aplica sombra com o valor `0 4px 14px rgba(109, 40, 217, 0.35) !important`. */
+        box-shadow: 0 4px 14px rgba(109, 40, 217, 0.35) !important;
+        /* Suaviza as mudancas visuais com o valor `all 0.2s ease !important`. */
+        transition: all 0.2s ease !important;
+    }
+    /* Seleciona `div.stButton:not([class*="st-key-ticket_"]) button[kind="primary"]:hover` para aplicar as regras visuais logo abaixo. */
+    div.stButton:not([class*="st-key-ticket_"]) button[kind="primary"]:hover {
+        /* Define o fundo ou preenchimento com o valor `linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%) !important`. */
+        background: linear-gradient(135deg, #5b21b6 0%, #7c3aed 100%) !important;
+        /* Define a cor do fundo com o valor `#7c3aed !important`. */
+        background-color: #7c3aed !important;
+        /* Aplica sombra com o valor `0 6px 20px rgba(109, 40, 217, 0.5) !important`. */
+        box-shadow: 0 6px 20px rgba(109, 40, 217, 0.5) !important;
+        /* Aplica uma transformacao visual com o valor `translateY(-2px) !important`. */
+        transform: translateY(-2px) !important;
+    }
+
+    /* Download Buttons */
+    /* Seleciona `.stDownloadButton button` para aplicar as regras visuais logo abaixo. */
+    .stDownloadButton button {
+        /* Arredonda os cantos com o valor `12px !important`. */
+        border-radius: 12px !important;
+        /* Define o peso da fonte com o valor `700 !important`. */
+        font-weight: 700 !important;
+        /* Define a borda e sua espessura com o valor `1.5px solid #cbd5e1 !important`. */
+        border: 1.5px solid #cbd5e1 !important;
+        /* Suaviza as mudancas visuais com o valor `all 0.2s ease !important`. */
+        transition: all 0.2s ease !important;
+    }
+    /* Seleciona `.stDownloadButton button:hover` para aplicar as regras visuais logo abaixo. */
+    .stDownloadButton button:hover {
+        /* Define a cor da borda com o valor `#6d28d9 !important`. */
+        border-color: #6d28d9 !important;
+        /* Define a cor do texto com o valor `#6d28d9 !important`. */
+        color: #6d28d9 !important;
+        /* Define o fundo ou preenchimento com o valor `#f5f3ff !important`. */
+        background: #f5f3ff !important;
+        /* Aplica uma transformacao visual com o valor `translateY(-1px) !important`. */
+        transform: translateY(-1px) !important;
+    }
+
+    /* Navegação Segmentada (Radio Buttons Horizontal) */
+    /* Seleciona `div[data-testid="stRadio"] > div[role="radiogroup"]` para aplicar as regras visuais logo abaixo. */
+    div[data-testid="stRadio"] > div[role="radiogroup"] {
+        /* Define o fundo ou preenchimento com o valor `#f1f5f9`. */
+        background: #f1f5f9;
+        /* Define o espaco interno com o valor `5px`. */
+        padding: 5px;
+        /* Arredonda os cantos com o valor `16px`. */
+        border-radius: 16px;
+        /* Define o espaco entre itens com o valor `6px`. */
+        gap: 6px;
+        /* Define a borda e sua espessura com o valor `1px solid #e2e8f0`. */
+        border: 1px solid #e2e8f0;
+    }
+    /* Seleciona `div[data-testid="stRadio"] > div[role="radiogroup"] label` para aplicar as regras visuais logo abaixo. */
+    div[data-testid="stRadio"] > div[role="radiogroup"] label {
+        /* Define o fundo ou preenchimento com o valor `transparent`. */
+        background: transparent;
+        /* Define o espaco interno com o valor `8px 18px`. */
+        padding: 8px 18px;
+        /* Arredonda os cantos com o valor `12px`. */
+        border-radius: 12px;
+        /* Define o peso da fonte com o valor `700`. */
+        font-weight: 700;
+        /* Define o tamanho do texto com o valor `0.92rem`. */
+        font-size: 0.92rem;
+        /* Define a cor do texto com o valor `#64748b`. */
+        color: #64748b;
+        /* Suaviza as mudancas visuais com o valor `all 0.2s ease`. */
+        transition: all 0.2s ease;
+        /* Define a borda e sua espessura com o valor `none !important`. */
+        border: none !important;
+        /* Define a propriedade `cursor` com o valor `pointer`. */
+        cursor: pointer;
+    }
+    /* Seleciona `div[data-testid="stRadio"] > div[role="radiogroup"] label[data-checked="true"]` para aplicar as regras visuais logo abaixo. */
+    div[data-testid="stRadio"] > div[role="radiogroup"] label[data-checked="true"] {
+        /* Define o fundo ou preenchimento com o valor `#ffffff !important`. */
+        background: #ffffff !important;
+        /* Define a cor do texto com o valor `#4c1d95 !important`. */
+        color: #4c1d95 !important;
+        /* Aplica sombra com o valor `0 4px 12px rgba(0, 0, 0, 0.08) !important`. */
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+    }
+
+    /* Métricas Reestilizadas */
+    /* Seleciona `div[data-testid="stMetric"]` para aplicar as regras visuais logo abaixo. */
+    div[data-testid="stMetric"] {
+        /* Define o fundo ou preenchimento com o valor `#ffffff`. */
+        background: #ffffff;
+        /* Define o espaco interno com o valor `1.1rem 1.3rem`. */
+        padding: 1.1rem 1.3rem;
+        /* Arredonda os cantos com o valor `16px`. */
+        border-radius: 16px;
+        /* Define a borda e sua espessura com o valor `1px solid #e2e8f0`. */
+        border: 1px solid #e2e8f0;
+        /* Aplica sombra com o valor `0 4px 12px rgba(0, 0, 0, 0.03)`. */
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+    }
+    /* Seleciona `div[data-testid="stMetricLabel"]` para aplicar as regras visuais logo abaixo. */
+    div[data-testid="stMetricLabel"] {
+        /* Define o tamanho do texto com o valor `0.85rem !important`. */
+        font-size: 0.85rem !important;
+        /* Define o peso da fonte com o valor `700 !important`. */
+        font-weight: 700 !important;
+        /* Define a cor do texto com o valor `#64748b !important`. */
+        color: #64748b !important;
+        /* Transforma a apresentacao de maiusculas/minusculas com o valor `uppercase`. */
+        text-transform: uppercase;
+        /* Define o espacamento entre letras com o valor `0.04em`. */
+        letter-spacing: 0.04em;
+    }
+    /* Seleciona `div[data-testid="stMetricValue"]` para aplicar as regras visuais logo abaixo. */
+    div[data-testid="stMetricValue"] {
+        /* Usa a fonte de interface do sistema nos valores dos indicadores. */
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif !important;
+        /* Define o tamanho do texto com o valor `1.8rem !important`. */
+        font-size: 1.8rem !important;
+        /* Define o peso da fonte com o valor `800 !important`. */
+        font-weight: 800 !important;
+        /* Define a cor do texto com o valor `#1e1b4b !important`. */
+        color: #1e1b4b !important;
+    }
+
+    /* Responsividade para Celulares e Tablets */
+    /* Restringe os estilos seguintes a telas estreitas, como celulares e tablets. */
+    @media (max-width: 768px) {
+        /* Seleciona `.hero-container` para aplicar as regras visuais logo abaixo. */
+        .hero-container {
+            /* Define o espaco interno com o valor `1.5rem 1.2rem`. */
+            padding: 1.5rem 1.2rem;
+            /* Define o espaco abaixo do componente com o valor `1.2rem`. */
+            margin-bottom: 1.2rem;
+        }
+        /* Seleciona `.hero-title` para aplicar as regras visuais logo abaixo. */
+        .hero-title {
+            /* Define o tamanho do texto com o valor `1.75rem`. */
+            font-size: 1.75rem;
+        }
+        /* Seleciona `.hero-subtitle` para aplicar as regras visuais logo abaixo. */
+        .hero-subtitle {
+            /* Define o tamanho do texto com o valor `0.88rem`. */
+            font-size: 0.88rem;
+        }
+        /* Seleciona `.ticket-body` para aplicar as regras visuais logo abaixo. */
+        .ticket-body {
+            /* Define o espaco interno com o valor `0.6rem`. */
+            padding: 0.6rem;
+        }
+        /* Seleciona `.ticket-header-title` para aplicar as regras visuais logo abaixo. */
+        .ticket-header-title {
+            /* Define o tamanho do texto com o valor `1.15rem`. */
+            font-size: 1.15rem;
+        }
+        /* Seleciona `[class*="st-key-ticket_"] button` para aplicar as regras visuais logo abaixo. */
+        [class*="st-key-ticket_"] button {
+            /* Define a altura com o valor `2.3rem !important`. */
+            height: 2.3rem !important;
+            /* Define a altura minima com o valor `2.3rem !important`. */
+            min-height: 2.3rem !important;
+            /* Define o tamanho do texto com o valor `0.88rem !important`. */
+            font-size: 0.88rem !important;
+            /* Arredonda os cantos com o valor `8px !important`. */
+            border-radius: 8px !important;
+        }
+        /* Seleciona `div[data-testid="stRadio"] > div[role="radiogroup"]` para aplicar as regras visuais logo abaixo. */
+        div[data-testid="stRadio"] > div[role="radiogroup"] {
+            /* Define a direcao dos itens flexiveis com o valor `column`. */
+            flex-direction: column;
+        }
+    }
