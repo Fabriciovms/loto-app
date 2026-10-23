@@ -1857,6 +1857,44 @@ def build_games_pdf(games: list[list[int]]) -> bytes:
     # Devolve output.getvalue() ao codigo que chamou esta funcao.
     return output.getvalue()
 
+
+# Gera uma pagina PDF no tamanho fisico da cartela contendo somente as marcacoes.
+def build_direct_print_pdf(games: list[list[int]]) -> bytes:
+    # Cria um buffer em memoria para guardar o documento PDF.
+    output = BytesIO()
+    # Converte a largura fisica da cartela de pontos de referencia da imagem para pontos PDF.
+    scale_x = VOLANTE_PRINT_WIDTH / VOLANTE_IMAGE_SIZE[0]
+    # Converte a altura fisica da cartela de pontos de referencia da imagem para pontos PDF.
+    scale_y = VOLANTE_PRINT_HEIGHT / VOLANTE_IMAGE_SIZE[1]
+    # Cria um documento com uma pagina do tamanho exato de uma cartela.
+    pdf = canvas.Canvas(output, pagesize=(VOLANTE_PRINT_WIDTH, VOLANTE_PRINT_HEIGHT))
+    # Agrupa jogos de mesmo tamanho em cartelas com ate tres jogos.
+    cards = group_print_cards(games)
+    # Percorre cada cartela que precisa ser impressa individualmente.
+    for game_size, card_games in cards:
+        # Define preto solido para desenhar apenas as marcacoes solicitadas.
+        pdf.setFillColorRGB(0, 0, 0)
+        # Percorre os jogos posicionados nas tres areas disponiveis da cartela.
+        for board_index, game in enumerate(card_games):
+            # Percorre cada dezena do jogo sem repetir marcacoes.
+            for number in set(game):
+                # Calcula a posicao da dezena nas coordenadas da imagem de referencia.
+                mark_x, mark_y, mark_width, mark_height = volante_mark_position(board_index, number)
+                # Desenha o quadrado preto da dezena na escala da cartela fisica.
+                pdf.rect(mark_x * scale_x, VOLANTE_PRINT_HEIGHT - (mark_y + mark_height) * scale_y, mark_width * scale_x, mark_height * scale_y, fill=1, stroke=0)
+        # Verifica que o tamanho selecionado corresponde a uma opcao permitida.
+        if game_size in BET_PRICES:
+            # Calcula a posicao da marcacao da quantidade de dezenas.
+            size_x, size_y, size_width, size_height = volante_size_mark_position(game_size)
+            # Desenha a marcacao preta de 15 a 20 dezenas.
+            pdf.rect(size_x * scale_x, VOLANTE_PRINT_HEIGHT - (size_y + size_height) * scale_y, size_width * scale_x, size_height * scale_y, fill=1, stroke=0)
+        # Finaliza a pagina da cartela para que a impressora avance ao proximo volante.
+        pdf.showPage()
+    # Grava o documento PDF no buffer.
+    pdf.save()
+    # Devolve os bytes do PDF para o botao de download.
+    return output.getvalue()
+
 # Renderiza o modulo de geracao por grupos configuraveis.
 def render_group_generator() -> None:
     # Aplica a folha de estilos compartilhada pelo aplicativo.
@@ -2842,22 +2880,40 @@ def render_print_module() -> None:
     )
     # games, errors recebe o valor que armazena em `games` o valor obtido de `parse_print_games(games_text)`.
     games, errors = parse_print_games(games_text)
+    # Permite escolher a folha A4 atual ou a impressao direta em cartela avulsa.
+    print_mode = st.radio("Formato de impressão", ["Folha A4 com scanner", "Impressão direta na cartela"], horizontal=True, key="print_mode")
     # Verifica se `games`.
     if games:
         # count_column, page_column recebe o valor que cria as colunas da interface usadas para organizar os controles.
         count_column, page_column = st.columns(2)
         # Compoe a expressao ou os argumentos da operacao iniciada acima.
         count_column.metric("Jogos v\u00e1lidos", len(games))
-        # Compoe a expressao ou os argumentos da operacao iniciada acima.
-        page_column.metric("Folhas A4", print_page_count(games))
+        # Exibe a quantidade de paginas conforme o formato de impressao escolhido.
+        if print_mode == "Impressão direta na cartela":
+            # Conta cartelas fisicas individuais agrupando jogos de tamanho igual.
+            page_column.metric("Cartelas para alimentar", len(group_print_cards(games)))
+        # Exibe o total de paginas A4 no formato com scanner.
+        else:
+            # Mantem a contagem de paginas do layout A4 existente.
+            page_column.metric("Folhas A4", print_page_count(games))
         # Chama `st.caption` para mostra uma legenda auxiliar ao usuario.
         st.caption("Jogos com a mesma quantidade de dezenas ficam juntos no mesmo volante.")
-        # Chama `st.caption` para mostra uma legenda auxiliar ao usuario.
-        st.caption("Cada folha A4 em retrato comporta 4 volantes, com até 12 jogos.")
-        # Chama `st.caption` para mostra uma legenda auxiliar ao usuario.
-        st.caption("As linhas cinza contornam cartelas de 8,2 x 14 cm e ficam alinhadas em todas as folhas para corte em pilha.")
-        # Chama `st.caption` para mostra uma legenda auxiliar ao usuario.
-        st.caption("Imprima em tamanho real (100%), sem ajustar à página.")
+        # Explica como funciona a alimentacao da impressora no modo direto.
+        if print_mode == "Impressão direta na cartela":
+            # Informa o tamanho de pagina e que cada uma avanca uma cartela.
+            st.caption("Cada página do PDF corresponde a uma cartela de 8,2 × 14 cm e contém até 3 jogos do mesmo tamanho.")
+            # Orienta a configuracao fisica da impressora e a escala de saida.
+            st.caption("Configure a impressora para a largura e altura da cartela e imprima em 100%, sem ajustar à página.")
+            # Informa que o arquivo contem somente as casas preenchidas.
+            st.caption("Este formato imprime apenas os quadrados pretos das dezenas e da quantidade de números; não inclui o scanner nem contornos.")
+        # Mantem as instrucoes do formato A4 com imagem e guias de corte.
+        else:
+            # Informa a capacidade do layout A4 existente.
+            st.caption("Cada folha A4 em retrato comporta 4 volantes, com até 12 jogos.")
+            # Informa o tamanho real e o alinhamento das guias de corte.
+            st.caption("As linhas cinza contornam cartelas de 8,2 x 14 cm e ficam alinhadas em todas as folhas para corte em pilha.")
+            # Orienta a impressao em escala fisica correta.
+            st.caption("Imprima em tamanho real (100%), sem ajustar à página.")
         # Chama `st.write` para exibe o valor ou resumo calculado na interface.
         st.write("Dezenas por linha: " + ", ".join(str(len(game)) for game in games))
     # Percorre error in errors e executa o bloco para cada item.
@@ -2868,22 +2924,28 @@ def render_print_module() -> None:
     if not games and not errors:
         # Chama `st.info` para mostra uma mensagem informativa.
         st.info("Cole os jogos acima para preparar o PDF.")
-    # Chama `st.download_button` para cria um botao para baixar o arquivo gerado.
+    # Escolhe a funcao de geracao e o nome conforme o formato selecionado.
+    pdf_data = build_direct_print_pdf(games) if games and not errors and print_mode == "Impressão direta na cartela" else build_games_pdf(games) if games and not errors else b""
+    # Define o rotulo e o nome de arquivo para a modalidade escolhida.
+    pdf_label = "Gerar PDF para impressão direta" if print_mode == "Impressão direta na cartela" else "Gerar PDF da Folha Loto"
+    # Define o nome de arquivo correspondente ao formato selecionado.
+    pdf_filename = "marcacoes_diretas_cartela.pdf" if print_mode == "Impressão direta na cartela" else "folha_loto.pdf"
+    # Cria o botao de download para o PDF do formato selecionado.
     st.download_button(
         # Fornece este texto como item da colecao ou argumento da chamada iniciada acima.
-        "Gerar PDF da Folha Loto",
-        # data recebe o valor que armazena em `data` o valor obtido de `build_games_pdf(games) if games and not errors else b"",`.
-        data=build_games_pdf(games) if games and not errors else b"",
+        pdf_label,
+        # Envia os bytes do PDF gerado no modo de impressao selecionado.
+        data=pdf_data,
         # file_name recebe o valor que define o texto ou identificador `"folha_loto.pdf",` usado nesta etapa.
-        file_name="folha_loto.pdf",
+        file_name=pdf_filename,
         # mime recebe o valor que define o texto ou identificador `"application/pdf",` usado nesta etapa.
         mime="application/pdf",
         # disabled recebe o valor que calcula a condicao `not games or bool(errors),` usada para decidir o fluxo.
         disabled=not games or bool(errors),
         # use_container_width recebe o valor que armazena em `use_container_width` o valor obtido de `True,`.
         use_container_width=True,
-        # help recebe o valor que define o texto ou identificador `"Usa o recorte escaneado ajustado às dimensõe` usado nesta etapa.
-        help="Usa o recorte escaneado ajustado às dimensões físicas de 8,2 x 14 cm.",
+        # Explica o formato atual no texto de ajuda do botao.
+        help="Gera as marcações sobre o scanner em A4 ou somente as marcações em páginas de 8,2 × 14 cm, conforme o formato escolhido.",
     # Fecha o agrupamento da chamada ou colecao iniciada acima.
     )
 
