@@ -1228,6 +1228,70 @@ def open_generated_games_in_checker() -> None:
     st.session_state["auto_check_pending"] = True
 
 
+# Gera combinacoes a partir dos grupos selecionados na nova area.
+def generate_group_games() -> None:
+    # Define novamente as faixas para ler os valores mais recentes dos controles.
+    ranges = [range(1, 6), range(6, 11), range(11, 16), range(16, 21), range(21, 26)]
+    # Prepara os grupos com os estados atualizados das caixas e seletores.
+    groups = []
+    # Percorre cada faixa para montar os dados combinatorios atuais.
+    for group_index, group_range in enumerate(ranges):
+        # Recupera somente as dezenas marcadas na faixa atual.
+        selected = [number for number in group_range if st.session_state.get(f"group_number_{number}", number != 3)]
+        # Recupera quantas dezenas devem ser escolhidas nesta faixa.
+        pick = int(st.session_state.get(f"group_pick_{group_index}", [1, 4, 3, 4, 3][group_index]))
+        # Inclui a faixa quando existe quantidade positiva para selecionar.
+        if selected and pick:
+            # Guarda as dezenas e sua quantidade escolhida.
+            groups.append((selected, pick))
+    # Sincroniza a configuracao visivel com os valores usados nesta geracao.
+    st.session_state["group_generation_config"] = groups
+    # Soma quantas dezenas compoem cada aposta configurada.
+    numbers_per_game = sum(pick for _, pick in groups)
+    # Impede a geracao de jogos sem dezenas.
+    if not groups or not 15 <= numbers_per_game <= 20:
+        st.session_state["group_generation_error"] = "Configure entre 15 e 20 dezenas por jogo antes de gerar."
+        return
+    # Gera o produto de combinacoes de todos os grupos.
+    games = generate_combinations([], groups)
+    # Armazena os jogos para exibicao e para os botoes de encaminhamento.
+    st.session_state["group_generated_games"] = games
+    # Armazena os jogos em linhas de texto para os outros modulos.
+    st.session_state["group_generated_games_txt"] = "\n".join(format_game(game) for game in games)
+
+
+# Leva os jogos deste modulo ao conferidor.
+def open_group_games_in_checker() -> None:
+    # Recupera as apostas que foram geradas neste modulo.
+    games_text = st.session_state.get("group_generated_games_txt", "")
+    # Informa a interface se ainda nao existem apostas para encaminhar.
+    if not games_text:
+        st.session_state["group_generation_error"] = "Gere as combinacoes antes de abrir o conferidor."
+        return
+    # Coloca o texto no campo de entrada do conferidor.
+    st.session_state["checker_games_text"] = games_text
+    # Seleciona a entrada por texto no conferidor.
+    st.session_state["checker_input_method"] = "Colar texto"
+    # Abre a secao do conferidor.
+    st.session_state["active_section"] = "Conferidor"
+    # Solicita a conferencia automatica dos jogos recebidos.
+    st.session_state["auto_check_pending"] = True
+
+
+# Leva os jogos deste modulo ao impressor de volantes.
+def open_group_games_in_printer() -> None:
+    # Recupera as apostas que foram geradas neste modulo.
+    games_text = st.session_state.get("group_generated_games_txt", "")
+    # Informa a interface se ainda nao existem apostas para encaminhar.
+    if not games_text:
+        st.session_state["group_generation_error"] = "Gere as combinacoes antes de enviar para impressao."
+        return
+    # Coloca as apostas no campo de texto do impressor.
+    st.session_state["print_games_text"] = games_text
+    # Abre a secao de impressao.
+    st.session_state["active_section"] = "Imprimir Folha Loto"
+
+
 # Prepara os jogos do Arquivo C e navega ao conferidor.
 def open_intersection_c_in_checker() -> None:
     # games recebe o valor que le ou atualiza o estado da sessao para preservar a selecao entre interacoes.
@@ -1765,6 +1829,86 @@ def build_games_pdf(games: list[list[int]]) -> bytes:
     pdf.save()
     # Devolve output.getvalue() ao codigo que chamou esta funcao.
     return output.getvalue()
+
+# Renderiza o modulo de geracao por grupos configuraveis.
+def render_group_generator() -> None:
+    # Aplica a folha de estilos compartilhada pelo aplicativo.
+    st.markdown(MODERN_CSS, unsafe_allow_html=True)
+    # Identifica a funcao desta area.
+    st.subheader("Gerador por Grupos")
+    # Explica como as cores da planilha sao representadas neste modulo.
+    st.caption("Selecione as dezenas que participam de cada grupo e quantas entram em cada jogo.")
+    # Define os cinco intervalos de dezenas da planilha.
+    ranges = [range(1, 6), range(6, 11), range(11, 16), range(16, 21), range(21, 26)]
+    # Define as quantidades iniciais de dezenas por grupo conforme a planilha.
+    default_picks = [1, 4, 3, 4, 3]
+    # Cria cinco colunas para exibir os grupos lado a lado.
+    group_columns = st.columns(5)
+    # Inicia a configuracao que sera usada pela geracao de combinacoes.
+    configured_groups = []
+    # Percorre cada grupo e seus controles de selecao.
+    for group_index, (group_range, default_pick, group_column) in enumerate(zip(ranges, default_picks, group_columns)):
+        # Mostra o intervalo que identifica este grupo.
+        group_column.markdown(f"**Grupo {group_index + 1}**  \n{group_range.start:02d}–{group_range.stop - 1:02d}")
+        # Prepara a selecao das dezenas deste grupo.
+        selected_numbers = []
+        # Adiciona por padrao somente a dezena 3 no primeiro grupo e todas nas demais faixas.
+        for number in group_range:
+            # Define se a dezena deve iniciar selecionada.
+            default_selected = number == 3 if group_index == 0 else True
+            # Cria uma caixa de selecao para a dezena.
+            if group_column.checkbox(f"{number:02d}", value=default_selected, key=f"group_number_{number}"):
+                # Guarda a dezena marcada para formar as combinacoes.
+                selected_numbers.append(number)
+        # Corrige o valor previamente salvo se a selecao do grupo foi reduzida.
+        pick_key = f"group_pick_{group_index}"
+        # Limita a quantidade salva ao numero de dezenas selecionadas.
+        if st.session_state.get(pick_key, default_pick) > len(selected_numbers):
+            # Atualiza o estado para manter o controle dentro do limite permitido.
+            st.session_state[pick_key] = len(selected_numbers)
+        # Cria o seletor da quantidade a escolher dentro do grupo.
+        pick = group_column.number_input("Quantidade", min_value=0, max_value=len(selected_numbers), value=min(default_pick, len(selected_numbers)), step=1, key=pick_key)
+        # Adiciona o grupo a configuracao quando ha dezenas a escolher.
+        if selected_numbers and pick:
+            # Armazena dezenas disponiveis e quantidade para a funcao combinatoria.
+            configured_groups.append((selected_numbers, int(pick)))
+    # Salva a configuracao para uso pelo callback de geracao.
+    st.session_state["group_generation_config"] = configured_groups
+    # Calcula quantas dezenas tera cada jogo.
+    total_numbers = sum(pick for _, pick in configured_groups)
+    # Apresenta a quantidade total de dezenas por aposta.
+    st.metric("Dezenas por jogo", total_numbers)
+    # Valida o total exigido pelas regras da Lotofacil.
+    if total_numbers and not 15 <= total_numbers <= 20:
+        # Orienta o usuario a ajustar as quantidades.
+        st.warning("A soma das quantidades dos grupos deve ficar entre 15 e 20 dezenas.")
+    # Cria botoes para gerar, conferir e imprimir as combinacoes.
+    generate_col, checker_col, print_col = st.columns(3)
+    # Dispara a geracao das combinacoes dos grupos.
+    generate_col.button("Gerar combinações", type="primary", use_container_width=True, on_click=generate_group_games)
+    # Navega ao conferidor com as combinacoes geradas.
+    checker_col.button("Conferir jogos gerados", use_container_width=True, on_click=open_group_games_in_checker)
+    # Navega ao impressor com as combinacoes geradas.
+    print_col.button("Enviar para imprimir", use_container_width=True, on_click=open_group_games_in_printer)
+    # Recupera e remove um eventual aviso deixado por um callback.
+    generation_error = st.session_state.pop("group_generation_error", None)
+    # Exibe avisos produzidos pelos botoes de encaminhamento.
+    if generation_error:
+        # Mostra o motivo pelo qual a acao nao pode continuar.
+        st.warning(generation_error)
+    # Exibe as combinacoes quando ja houver resultado armazenado.
+    games = st.session_state.get("group_generated_games", [])
+    # Mostra um resumo e uma amostra dos jogos gerados.
+    if games:
+        # Informa quantas combinacoes foram produzidas.
+        st.success(f"{len(games):,} combinação(ões) gerada(s).".replace(",", "."))
+        # Apresenta ate dez jogos para conferencia visual.
+        for game in games[:10]:
+            # Mostra um jogo formatado como texto.
+            st.code(format_game(game), language="text")
+        # Permite baixar o conjunto completo em arquivo texto.
+        st.download_button("Baixar combinações (.txt)", data=st.session_state["group_generated_games_txt"], file_name="combinacoes_por_grupo.txt", mime="text/plain", use_container_width=True)
+
 
 # Renderiza a interface do gerador de combinacoes Lotofacil.
 def render_generator():
@@ -2617,23 +2761,11 @@ def parse_print_games(text: str) -> tuple[list[list[int]], list[str]]:
         if not line.strip():
             # Pula para a proxima repeticao do laco atual.
             continue
-        # numbers recebe o valor que armazena em `numbers` o valor obtido de `parse_numbers(line)`.
-        numbers = parse_numbers(line)
+        # Extrai os numeros da linha e ignora os que nao pertencem a faixa de 1 a 25.
+        numbers = [number for number in parse_numbers(line) if number in ALL_NUMBERS]
         # Verifica se `not numbers`.
         if not numbers:
-            # Compoe a expressao ou os argumentos da operacao iniciada acima.
-            errors.append(f"Linha {line_number}: n\u00e3o encontrei dezenas.")
-            # Pula para a proxima repeticao do laco atual.
-            continue
-        # out_of_range recebe o valor que normaliza os dados para a estrutura exigida pelo restante do fluxo.
-        out_of_range = sorted({number for number in numbers if number not in ALL_NUMBERS})
-        # Verifica se `out_of_range`.
-        if out_of_range:
-            # listed recebe o valor que define o texto ou identificador `", ".join(f"{number:02d}" for number in out_o` usado nesta etapa.
-            listed = ", ".join(f"{number:02d}" for number in out_of_range)
-            # Compoe a expressao ou os argumentos da operacao iniciada acima.
-            errors.append(f"Linha {line_number}: dezenas fora do intervalo 01 a 25 ({listed}).")
-            # Pula para a proxima repeticao do laco atual.
+            # Ignora linhas vazias ou que so contenham valores fora do intervalo valido.
             continue
         # Verifica se `len(numbers) != len(set(numbers))`.
         if len(numbers) != len(set(numbers)):
@@ -2769,7 +2901,7 @@ def main():
         # Fornece este texto como item da colecao ou argumento da chamada iniciada acima.
         "Navegação",
         # Continua a expressao composta iniciada acima com este operando.
-        ["Gerador de Combina\u00e7\u00f5es", "M\u00f3dulo A/B/C", "Imprimir Folha Loto", "Conferidor"],
+        ["Gerador de Combina\u00e7\u00f5es", "Gerador por Grupos", "M\u00f3dulo A/B/C", "Imprimir Folha Loto", "Conferidor"],
         # horizontal recebe o valor que armazena em `horizontal` o valor obtido de `True,`.
         horizontal=True,
         # key recebe o valor que define o texto ou identificador `"active_section",` usado nesta etapa.
@@ -2786,6 +2918,10 @@ def main():
     if active_section == "Gerador de Combinações":
         # Compoe a expressao ou os argumentos da operacao iniciada acima.
         render_generator()
+    # Verifica se a secao de geracao por grupos esta selecionada.
+    elif active_section == "Gerador por Grupos":
+        # Renderiza a configuracao e os resultados do gerador por grupos.
+        render_group_generator()
     # Verifica a proxima condicao: `active_section == "Módulo A/B/C"`.
     elif active_section == "Módulo A/B/C":
         # Compoe a expressao ou os argumentos da operacao iniciada acima.
